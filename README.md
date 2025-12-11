@@ -218,11 +218,8 @@ npm run dev
 
 ## 👤 Default Accounts
 
-### Admin Account
-- **Email:** `admin@catprep.com`
-- **Password:** `admin123`
 
-### Student Account
+### Student Account this will be a test email you can use this to browse around the website to track you own exam progress your register and login is recomended 
 - **Email:** `student@catprep.com`
 - **Password:** `student123`
 
@@ -406,7 +403,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👨‍💻 Developer
 
 **Daksh**  
-📧 Email: [your-email@example.com](mailto:your-email@example.com)  
+📧 Email: [dakshshah692@gmail.com)  
 🔗 GitHub: [@daksh692](https://github.com/daksh692)
 
 ---
