@@ -179,27 +179,38 @@ export default function Syllabus() {
 
             {/* Stats Footer */}
             {modules && modules.length > 0 && (
-                <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-xl border border-blue-200">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                        <div>
-                            <p className="text-2xl font-bold text-primary">{modules.length}</p>
-                            <p className="text-sm text-gray-600">Total Modules</p>
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-xl border border-blue-200 mt-8">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">📊 Course Overview</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                            <div className="text-3xl mb-2">📚</div>
+                            <p className="text-3xl font-bold text-blue-600 mb-1">{modules.length}</p>
+                            <p className="text-sm font-medium text-gray-600">Total Modules</p>
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold text-primary">
-                                {modules.reduce((sum, m) => sum + (m.estimated_hours || 0), 0)}
+                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                            <div className="text-3xl mb-2">⏱️</div>
+                            <p className="text-3xl font-bold text-purple-600 mb-1">
+                                {(() => {
+                                    const totalHours = modules.reduce((sum, m) => sum + (Number(m.estimated_hours) || 0), 0);
+                                    const days = Math.floor(totalHours / 24);
+                                    const hours = Math.floor(totalHours % 24);
+                                    const minutes = Math.round((totalHours % 1) * 60);
+                                    return `${days}d ${hours}h ${minutes}m`;
+                                })()}
                             </p>
-                            <p className="text-sm text-gray-600">Total Hours</p>
+                            <p className="text-sm font-medium text-gray-600">Total Time</p>
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold text-primary">
+                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                            <div className="text-3xl mb-2">📖</div>
+                            <p className="text-3xl font-bold text-green-600 mb-1">
                                 {modules.filter(m => m.section === 'VARC').length}
                             </p>
-                            <p className="text-sm text-gray-600">VARC Modules</p>
+                            <p className="text-sm font-medium text-gray-600">VARC Modules</p>
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold text-primary">0%</p>
-                            <p className="text-sm text-gray-600">Completed</p>
+                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                            <div className="text-3xl mb-2">✅</div>
+                            <p className="text-3xl font-bold text-orange-600 mb-1">0%</p>
+                            <p className="text-sm font-medium text-gray-600">Completed</p>
                         </div>
                     </div>
                 </div>
