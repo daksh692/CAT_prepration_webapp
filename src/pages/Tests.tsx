@@ -41,6 +41,11 @@ export default function Tests() {
     const [heatmapData, setHeatmapData] = useState<any[]>([]);
     const [topicData, setTopicData] = useState<any>(null);
     const [catPrediction, setCatPrediction] = useState<any>(null);
+
+    // Phase 2B state - Date Range
+    const [dateRange, setDateRange] = useState<'7' | '15' | '30' | '60' | '90' | 'all' | 'custom'>('30');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Form state for adding external tests
@@ -58,9 +63,30 @@ export default function Tests() {
         fetchAllData();
     }, []);
 
+    // Refetch when date range changes
+    useEffect(() => {
+        if (dateRange !== 'custom' || (customStartDate && customEndDate)) {
+            fetchAllData();
+        }
+    }, [dateRange, customStartDate, customEndDate]);
+
+    const getDaysFromRange = () => {
+        if (dateRange === 'all') return 3650; // ~10 years
+        if (dateRange === 'custom') {
+            if (!customStartDate || !customEndDate) return 30;
+            const start = new Date(customStartDate);
+            const end = new Date(customEndDate);
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+        return parseInt(dateRange);
+    };
+
     const fetchAllData = async () => {
         setLoading(true);
         try {
+            const days = getDaysFromRange();
+
             const [
                 resultsData,
                 trendsData,
@@ -71,12 +97,12 @@ export default function Tests() {
                 topics,
                 prediction
             ] = await Promise.all([
-                api.getTestResults(30),
-                api.getPerformanceTrends(30),
+                api.getTestResults(days),
+                api.getPerformanceTrends(days),
                 api.getSubjectPerformance(),
                 api.getWeakAreas(),
                 api.getAchievements(),
-                api.getStudyHeatmap(90),
+                api.getStudyHeatmap(Math.min(days, 365)),
                 api.getTopicAnalytics(),
                 api.getCATPredictor()
             ]);
@@ -95,6 +121,46 @@ export default function Tests() {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Phase 2B: Custom Tooltip Component
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (!active || !payload || !payload.length) return null;
+
+        const data = payload[0].payload;
+
+        return (
+            <div className="bg-white p-4 rounded-lg shadow-2xl border-2 border-blue-300 max-w-xs">
+                <p className="font-bold text-gray-800 mb-3 text-sm border-b pb-2">
+                    📅 {label}
+                </p>
+                <div className="space-y-2 text-sm">
+                    {data.score !== undefined && (
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-600">Score:</span>
+                            <span className="font-bold text-blue-600 text-lg">{data.score}%</span>
+                        </div>
+                    )}
+                    {data.type && (
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-600">Type:</span>
+                            <span className="font-semibold">{data.type === 'website' ? '🌐 Website' : '📚 External'}</span>
+                        </div>
+                    )}
+                    {data.tests && (
+                        <div className="flex justify-between gap-6">
+                            <span className="text-gray-600">Tests:</span>
+                            <span className="font-semibold text-indigo-600">{data.tests}</span>
+                        </div>
+                    )}
+                    {data.subject && (
+                        <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
+                            📖 {data.subject}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
     };
 
     const calculateMarks = () => {
@@ -184,6 +250,62 @@ export default function Tests() {
             {/* Overview Tab */}
             {activeTab === 'overview' && (
                 <div className="space-y-6">
+                    {/* Phase 2B: Date Range Selector */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex-1 min-w-[200px]">
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    📅 Date Range Filter
+                                </label>
+                                <select
+                                    value={dateRange}
+                                    onChange={(e) => setDateRange(e.target.value as any)}
+                                    className="w-full px-4 py-3 border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 font-medium"
+                                >
+                                    <option value="7">Last 7 Days</option>
+                                    <option value="15">Last 15 Days</option>
+                                    <option value="30">Last 30 Days</option>
+                                    <option value="60">Last 60 Days</option>
+                                    <option value="90">Last 90 Days</option>
+                                    <option value="all">All Time</option>
+                                    <option value="custom">Custom Range...</option>
+                                </select>
+                            </div>
+
+                            {dateRange === 'custom' && (
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <div>
+                                        <label className="block text-xs text-gray-600 mb-1">From</label>
+                                        <input
+                                            type="date"
+                                            value={customStartDate}
+                                            onChange={(e) => setCustomStartDate(e.target.value)}
+                                            className="px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <span className="text-gray-500 mt-5">to</span>
+                                    <div>
+                                        <label className="block text-xs text-gray-600 mb-1">To</label>
+                                        <input
+                                            type="date"
+                                            value={customEndDate}
+                                            onChange={(e) => setCustomEndDate(e.target.value)}
+                                            className="px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {dateRange !== 'custom' && (
+                                <div className="text-sm text-gray-600 mt-6">
+                                    <span className="font-semibold">
+                                        {dateRange === 'all' ? 'All Time' : `Last ${dateRange} Days`}
+                                    </span> • {results.length} tests found
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {loading ? (
                         <div className="text-center py-12">
                             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -225,8 +347,8 @@ export default function Tests() {
                                             <p className="text-gray-600 text-sm mt-1">Based on your recent performance</p>
                                         </div>
                                         <div className={`px-4 py-2 rounded-full text-xs font-semibold ${catPrediction.confidence === 'high' ? 'bg-green-100 text-green-700' :
-                                                catPrediction.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                    'bg-gray-100 text-gray-700'
+                                            catPrediction.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-gray-100 text-gray-700'
                                             }`}>
                                             {catPrediction.confidence.toUpperCase()} CONFIDENCE
                                         </div>
@@ -277,10 +399,10 @@ export default function Tests() {
                                                 <div
                                                     key={idx}
                                                     className={`w-3 h-3 rounded-sm cursor-pointer transition-all hover:scale-125 ${day.level === 0 ? 'bg-gray-100' :
-                                                            day.level === 1 ? 'bg-green-200' :
-                                                                day.level === 2 ? 'bg-green-400' :
-                                                                    day.level === 3 ? 'bg-green-600' :
-                                                                        'bg-green-800'
+                                                        day.level === 1 ? 'bg-green-200' :
+                                                            day.level === 2 ? 'bg-green-400' :
+                                                                day.level === 3 ? 'bg-green-600' :
+                                                                    'bg-green-800'
                                                         }`}
                                                     title={`${day.date}: ${day.study_minutes}min, ${day.test_count} tests, ${day.questions} questions`}
                                                 ></div>
@@ -332,8 +454,8 @@ export default function Tests() {
                                                 <summary className="bg-gray-50 px-4 py-3 cursor-pointer hover:bg-gray-100 flex justify-between items-center">
                                                     <div className="flex items-center gap-3">
                                                         <span className={`px-2 py-1 rounded text-xs font-semibold ${module.section === 'VARC' ? 'bg-green-100 text-green-700' :
-                                                                module.section === 'DILR' ? 'bg-orange-100 text-orange-700' :
-                                                                    'bg-blue-100 text-blue-700'
+                                                            module.section === 'DILR' ? 'bg-orange-100 text-orange-700' :
+                                                                'bg-blue-100 text-blue-700'
                                                             }`}>
                                                             {module.section}
                                                         </span>
@@ -356,9 +478,9 @@ export default function Tests() {
                                                                     </div>
                                                                 </div>
                                                                 <div className={`text-2xl font-bold ${chapter.avg_percentage >= 80 ? 'text-green-600' :
-                                                                        chapter.avg_percentage >= 60 ? 'text-blue-600' :
-                                                                            chapter.avg_percentage >= 40 ? 'text-orange-600' :
-                                                                                'text-red-600'
+                                                                    chapter.avg_percentage >= 60 ? 'text-blue-600' :
+                                                                        chapter.avg_percentage >= 40 ? 'text-orange-600' :
+                                                                            'text-red-600'
                                                                     }`}>
                                                                     {chapter.avg_percentage.toFixed(1)}%
                                                                 </div>
@@ -381,7 +503,7 @@ export default function Tests() {
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="date" />
                                             <YAxis domain={[0, 100]} />
-                                            <Tooltip />
+                                            <Tooltip content={<CustomTooltip />} />
                                             <Legend />
                                             <Line type="monotone" dataKey="score" stroke="#3B82F6" strokeWidth={2} name="Score %" />
                                         </LineChart>
@@ -398,7 +520,7 @@ export default function Tests() {
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="subject" />
                                             <YAxis domain={[0, 100]} />
-                                            <Tooltip />
+                                            <Tooltip content={<CustomTooltip />} />
                                             <Legend />
                                             <Bar dataKey="score" fill="#8B5CF6" name="Average Score %" />
                                         </BarChart>
