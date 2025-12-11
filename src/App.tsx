@@ -12,6 +12,8 @@ import SkipTest from './pages/SkipTest';
 import StudyMaterial from './pages/StudyMaterial';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminProfile from './pages/AdminProfile';
+import Friends from './pages/Friends';
+import Leaderboard from './pages/Leaderboard';
 
 function Navigation() {
   const location = useLocation();
@@ -25,6 +27,8 @@ function Navigation() {
     { path: '/syllabus', label: 'Syllabus', icon: '📚' },
     { path: '/study', label: 'Study', icon: '⏱️' },
     { path: '/tests', label: 'Tests', icon: '📝' },
+    { path: '/friends', label: 'Friends', icon: '👥' },
+    { path: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
     ...(isAdmin ? [{ path: '/admin', label: 'Admin', icon: '⚙️' }] : []),
     ...(isAdmin ? [{ path: '/admin/profile', label: 'Settings', icon: '🔧' }] : []),
     { path: '/profile', label: 'Profile', icon: '👤' },
@@ -111,6 +115,18 @@ function AppContent() {
           <Route path="/profile" element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          } />
+
+          {/* Phase 2C: Friends & Leaderboard */}
+          <Route path="/friends" element={
+            <ProtectedRoute>
+              <Friends />
+            </ProtectedRoute>
+          } />
+          <Route path="/leaderboard" element={
+            <ProtectedRoute>
+              <Leaderboard />
             </ProtectedRoute>
           } />
 

@@ -218,11 +218,9 @@ npm run dev
 
 ## 👤 Default Accounts
 
-### Admin Account
-- **Email:** `admin@catprep.com`
-- **Password:** `admin123`
+### Student Account (Test Account)
+> This is a test account you can use to browse around the website to track your own exam progress. For personal use, registration and login with your own account is recommended.
 
-### Student Account
 - **Email:** `student@catprep.com`
 - **Password:** `student123`
 
@@ -363,25 +361,27 @@ CATPrep-Web/
 
 ## 🎯 Roadmap
 
-### ✅ Completed (Phase 1 & 2A)
+### ✅ Completed (Phase 1, 2A, 2B & 2C)
 - Core study management
-- Practice test system
+- Practice test system  
 - Basic & advanced analytics
 - Achievement system
 - CAT percentile predictor
 - Study heatmap
 - Topic-wise deep dive
-
-### 🔄 In Progress (Phase 2B)
 - Custom date range selector
 - Interactive chart tooltips
 - Enhanced data filtering
+- **Friend system with unique codes**
+- **Dual leaderboards (Public & Friends)**
+- **Friend analytics dashboard**
+- **Streak tracking system**
 
-### 📋 Planned (Phase 2C)
+### 📋 Planned (Phase 3)
 - PDF report export
-- Optional leaderboards
-- Study pattern insights
+- Study pattern insights  
 - Mobile app version
+- Push notifications
 
 ---
 

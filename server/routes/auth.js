@@ -31,12 +31,37 @@ router.post('/register', async (req, res) => {
         
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
-        const now = Date.now();
+        
+        // Generate unique friend code
+        function generateFriendCode() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 12; i++) {
+                code += chars[Math.floor(Math.random() * chars.length)];
+            }
+            return code;
+        }
+        
+        let friendCode = generateFriendCode();
+        let isUnique = false;
+        
+        // Ensure code is unique
+        while (!isUnique) {
+            const [existing] = await pool.query(
+                'SELECT id FROM users WHERE friend_code = ?',
+                [friendCode]
+            );
+            if (existing.length === 0) {
+                isUnique = true;
+            } else {
+                friendCode = generateFriendCode();
+            }
+        }
         
         // Insert user (role defaults to 'user')
         const [result] = await pool.query(
-            'INSERT INTO users (email, password, name, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [email, hashedPassword, name, 'user', now, now]
+            'INSERT INTO users (email, password, name, role, friend_code) VALUES (?, ?, ?, ?, ?)',
+            [email, hashedPassword, name, 'user', friendCode]
         );
         
         // Generate token (no expiration - persists until logout)
@@ -49,7 +74,8 @@ router.post('/register', async (req, res) => {
             id: result.insertId,
             email,
             name,
-            role: 'user'
+            role: 'user',
+            friendCode
         };
         
         res.status(201).json({

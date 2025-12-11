@@ -98,7 +98,7 @@ router.get('/trends', async (req, res) => {
         const days = parseInt(req.query.days) || 30;
         
         const startDate = new Date();
-        startDate.setDate(startDate.setDate() - days);
+        startDate.setDate(startDate.getDate() - days);
         const startDateStr = startDate.toISOString().split('T')[0];
         
         const [data] = await pool.query(
@@ -433,12 +433,12 @@ router.get('/heatmap', async (req, res) => {
         // Get study sessions by date
         const [sessionData] = await pool.query(
             `SELECT 
-                DATE(FROM_UNIXTIME(start_time/1000)) as date,
+                date,
                 SUM(duration) as total_minutes,
                 COUNT(*) as session_count
              FROM study_sessions
-             WHERE user_id = ? AND DATE(FROM_UNIXTIME(start_time/1000)) >= ?
-             GROUP BY DATE(FROM_UNIXTIME(start_time/1000))
+             WHERE user_id = ? AND date >= ?
+             GROUP BY date
              ORDER BY date ASC`,
             [userId, startDateStr]
         );

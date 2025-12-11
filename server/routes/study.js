@@ -149,33 +149,63 @@ router.post('/sessions/end', async (req, res) => {
             [userId, today, chapter_id || null, duration, questions_completed || 0, now]
         );
         
-        // Update streak (pass auth token)
-        const streakUpdateUrl = 'http://localhost:5000/api/dashboard/streak/update';
-        try {
-            const streakResponse = await fetch(streakUpdateUrl, { 
-                method: 'POST',
-                headers: {
-                    'Authorization': req.headers.authorization
+        // Update streak for Phase 2C
+        
+        const [user] = await pool.query(
+            'SELECT last_study_date, current_streak, longest_streak FROM users WHERE id = ?',
+            [userId]
+        );
+        
+        if (user.length > 0) {
+            const lastDate = user[0].last_study_date;
+            let currentStreak = user[0].current_streak || 0;
+            let longestStreak = user[0].longest_streak || 0;
+            
+            if (!lastDate) {
+                // First study session
+                currentStreak = 1;
+            } else {
+                const lastStudyDate = new Date(lastDate);
+                const todayDate = new Date(today);
+                const diffDays = Math.floor((todayDate - lastStudyDate) / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === 0) {
+                    // Same day, no change
+                } else if (diffDays === 1) {
+                    // Consecutive day, increment
+                    currentStreak += 1;
+                } else {
+                    // Missed days, reset
+                    currentStreak = 1;
                 }
-            });
-            const streakData = await streakResponse.json();
+            }
+            
+            // Update longest if current exceeds it
+            if (currentStreak > longestStreak) {
+                longestStreak = currentStreak;
+            }
+            
+            await pool.query(
+                'UPDATE users SET current_streak = ?, longest_streak = ?, last_study_date = ? WHERE id = ?',
+                [currentStreak, longestStreak, today, userId]
+            );
             
             res.json({
                 message: 'Session saved successfully',
                 session_id: result.insertId,
                 duration,
                 questions_completed: questions_completed || 0,
-                streak: streakData
+                streak: {
+                    current: currentStreak,
+                    longest: longestStreak
+                }
             });
-        } catch (streakError) {
-            console.error('Error updating streak:', streakError);
-            // Still return success for session save
+        } else {
             res.json({
                 message: 'Session saved successfully',
                 session_id: result.insertId,
                 duration,
-                questions_completed: questions_completed || 0,
-                streak: null
+                questions_completed: questions_completed || 0
             });
         }
     } catch (error) {

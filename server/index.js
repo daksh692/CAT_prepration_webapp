@@ -20,6 +20,8 @@ const adminRouter = require('./routes/admin');
 const dashboardRouter = require('./routes/dashboard');
 const testsRouter = require('./routes/tests');
 const analyticsRouter = require('./routes/analytics');
+const friendsRouter = require('./routes/friends');
+const leaderboardRouter = require('./routes/leaderboard');
 
 app.use('/api/auth', authRouter);
 app.use('/api/modules', modulesRouter);
@@ -29,6 +31,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/tests', testsRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/friends', friendsRouter);
+app.use('/api/leaderboard', leaderboardRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

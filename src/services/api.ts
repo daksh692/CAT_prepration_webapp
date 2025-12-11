@@ -320,14 +320,96 @@ class ApiService {
     // Get CAT score prediction
     async getCATPredictor() {
         return this.request<{
-            predicted_percentile: number | null;
+            predicted_percentile: number;
             confidence: string;
-            recent_avg?: number;
-            overall_avg?: number;
-            total_tests?: number;
-            section_scores?: any;
-            message?: string;
+            recent_average: number;
+            overall_average: number;
+            total_tests: number;
+            section_averages: any;
         }>('/analytics/cat-predictor');
+    }
+
+    // =================================
+    // PHASE 2C - FRIEND SYSTEM
+    // =================================
+
+    // Get my friend code
+    async getMyFriendCode() {
+        return this.request<{ code: string }>('/friends/my-code');
+    }
+
+    // Send friend request
+    async sendFriendRequest(friendCode: string) {
+        return this.request('/friends/request', {
+            method: 'POST',
+            body: JSON.stringify({ friendCode })
+        });
+    }
+
+    // Get pending friend requests
+    async getPendingRequests() {
+        return this.request<{ requests: any[] }>('/friends/requests/pending');
+    }
+
+    // Accept friend request
+    async acceptFriendRequest(requestId: number) {
+        return this.request(`/friends/requests/${requestId}/accept`, {
+            method: 'POST'
+        });
+    }
+
+    // Reject friend request
+    async rejectFriendRequest(requestId: number) {
+        return this.request(`/friends/requests/${requestId}/reject`, {
+            method: 'POST'
+        });
+    }
+
+    //Get friends list
+    async getFriends() {
+        return this.request<{ friends: any[] }>('/friends');
+    }
+
+    // Get friend analytics
+    async getFriendAnalytics(friendId: number) {
+        return this.request<{
+            friend: { name: string; current_streak: number; longest_streak: number };
+            overall: { total_tests: number; avg_score: string; best_score: string };
+            subjects: any[];
+            rank: { position: number; total_friends: number };
+        }>(`/friends/${friendId}/analytics`);
+    }
+
+    // Remove friend
+    async removeFriend(friendId: number) {
+        return this.request(`/friends/${friendId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // =================================
+    // PHASE 2C - LEADERBOARDS
+    // =================================
+
+    // Get public leaderboard
+    async getPublicLeaderboard(section: string | null = null) {
+        const url = section ? `/leaderboard/public?section=${section}` : '/leaderboard/public';
+        return this.request<{ leaderboard: any[] }>(url);
+    }
+
+    // Get friends leaderboard
+    async getFriendsLeaderboard(section: string | null = null, sortBy: string = 'score') {
+        let url = `/leaderboard/friends?sortBy=${sortBy}`;
+        if (section) url += `&section=${section}`;
+        return this.request<{ leaderboard: any[] }>(url);
+    }
+
+    // Toggle public leaderboard visibility
+    async togglePublicLeaderboard(show: boolean) {
+        return this.request('/leaderboard/public/toggle', {
+            method: 'POST',
+            body: JSON.stringify({ show })
+        });
     }
 }
 
