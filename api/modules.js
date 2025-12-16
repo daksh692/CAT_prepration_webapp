@@ -24,7 +24,7 @@ export default async function handler(req, res) {
             FROM modules m
             LEFT JOIN chapters c ON m.id = c.module_id
             GROUP BY m.id
-            ORDER BY m.order
+            ORDER BY m.\`order\`
         `);
         
         return res.status(200).json(modules);
