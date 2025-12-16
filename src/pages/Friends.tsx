@@ -29,7 +29,6 @@ export default function Friends() {
 
     // Analytics modal state
     const [showAnalytics, setShowAnalytics] = useState(false);
-    const [selectedFriend, setSelectedFriend] = useState<number | null>(null);
     const [analytics, setAnalytics] = useState<any>(null);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
 

@@ -29,7 +29,7 @@ export default function Study() {
     const [weeklyData, setWeeklyData] = useState<any>(null);
 
     // Timer
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const timerRef = useRef<number | null>(null);
 
     // Load chapters and stats on mount
     useEffect(() => {
@@ -388,8 +388,8 @@ export default function Study() {
                                 <button
                                     onClick={() => setStudyMode('website')}
                                     className={`flex-1 py-3 rounded-lg font-semibold transition ${studyMode === 'website'
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-white text-gray-700 border border-gray-300'
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-white text-gray-700 border border-gray-300'
                                         }`}
                                 >
                                     💻 Website (auto-pause on inactivity)
@@ -397,8 +397,8 @@ export default function Study() {
                                 <button
                                     onClick={() => setStudyMode('external')}
                                     className={`flex-1 py-3 rounded-lg font-semibold transition ${studyMode === 'external'
-                                            ? 'bg-purple-500 text-white'
-                                            : 'bg-white text-gray-700 border border-gray-300'
+                                        ? 'bg-purple-500 text-white'
+                                        : 'bg-white text-gray-700 border border-gray-300'
                                         }`}
                                 >
                                     📚 External Materials (manual timer)
