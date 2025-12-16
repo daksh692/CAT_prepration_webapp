@@ -43,3 +43,7 @@ server/check-*.js
 server/verify-*.js
 server/compare-*.js
 server/fix-*.js
+
+# Audit logs (contain sensitive information)
+logs/
+server/logs/

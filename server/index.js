@@ -1,12 +1,68 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { testConnection } = require('./config/database');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Security Middleware
+// 1. Helmet - Set security headers
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "https:"],
+        },
+    },
+    crossOriginEmbedderPolicy: false,
+}));
+
+// 2. Rate Limiting - Prevent brute force attacks
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 login attempts per windowMs
+    message: 'Too many login attempts, please try again after 15 minutes.',
+    skipSuccessfulRequests: true,
+});
+
+// Apply rate limiting
+app.use('/api/', apiLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+
+// 3. Audit Logging Middleware
+const auditLog = (action, details = {}) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[AUDIT] ${timestamp} | ${action} |`, JSON.stringify(details));
+};
+
+app.use((req, res, next) => {
+    // Log authentication and admin actions
+    if (req.path.includes('/auth/') || req.path.includes('/admin/')) {
+        auditLog('API_REQUEST', {
+            method: req.method,
+            path: req.path,
+            ip: req.ip,
+            userAgent: req.get('user-agent')
+        });
+    }
+    next();
+});
+
+// Standard Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
