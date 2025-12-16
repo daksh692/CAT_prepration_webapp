@@ -6,9 +6,7 @@ export default function Login() {
     const navigate = useNavigate();
     const { login, register } = useAuth();
 
-    const [activeTab, setActiveTab] = useState<'user' | 'admin'>('user');
     const [isRegister, setIsRegister] = useState(false);
-
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
@@ -22,7 +20,7 @@ export default function Login() {
 
         try {
             if (isRegister) {
-                // Register (only available for users)
+                // Register
                 if (!name) {
                     setError('Name is required');
                     setLoading(false);
@@ -30,11 +28,11 @@ export default function Login() {
                 }
                 await register(email, password, name);
             } else {
-                // Login
+                // Login - auto-detects role and redirects appropriately
                 await login(email, password);
             }
 
-            // Redirect to dashboard
+            // Redirect to dashboard (handled by AuthContext based on role)
             navigate('/');
         } catch (err: any) {
             setError(err.message || 'Authentication failed');
@@ -43,16 +41,14 @@ export default function Login() {
         }
     };
 
-    // Pre-fill demo credentials when clicking on demo buttons
+    // Pre-fill demo credentials
     const useDemoCredentials = (type: 'admin' | 'user') => {
         if (type === 'admin') {
             setEmail('admin@catprep.com');
             setPassword('admin123');
-            setActiveTab('admin');
         } else {
             setEmail('student@catprep.com');
             setPassword('student123');
-            setActiveTab('user');
         }
         setIsRegister(false);
     };
@@ -67,30 +63,6 @@ export default function Login() {
                         {isRegister ? 'Create your account' : 'Welcome back!'}
                     </p>
                 </div>
-
-                {/* Tab Selector (Login only) */}
-                {!isRegister && (
-                    <div className="flex border-b">
-                        <button
-                            onClick={() => setActiveTab('user')}
-                            className={`flex-1 py-4 font-semibold transition ${activeTab === 'user'
-                                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                                    : 'text-gray-500 hover:bg-gray-50'
-                                }`}
-                        >
-                            👤 User Login
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('admin')}
-                            className={`flex-1 py-4 font-semibold transition ${activeTab === 'admin'
-                                    ? 'bg-purple-50 text-purple-600 border-b-2 border-purple-600'
-                                    : 'text-gray-500 hover:bg-gray-50'
-                                }`}
-                        >
-                            🔐 Admin Login
-                        </button>
-                    </div>
-                )}
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -148,10 +120,7 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className={`w-full py-3 rounded-lg font-bold text-white transition ${activeTab === 'admin'
-                                ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
-                                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
-                            } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`w-full py-3 rounded-lg font-bold text-white transition bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Login'}
                     </button>

@@ -99,7 +99,10 @@ router.post('/login', async (req, res) => {
         }
         
         // Find user
-        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+        const [users] = await pool.query(
+            'SELECT id, name, email, password, role FROM users WHERE email = ?',
+            [email]
+        );
         
         if (users.length === 0) {
             return res.status(401).json({ error: 'Invalid email or password' });
