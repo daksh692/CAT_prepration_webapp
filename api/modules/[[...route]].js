@@ -6,8 +6,8 @@
  * GET /api/modules/section/[section] (By Section)
  */
 
-import { executeQuery } from '../../_lib/db.js';
-import { handleCORS, errorResponse } from '../../_lib/security.js';
+import { executeQuery } from '../_lib/db.js';
+import { handleCORS, errorResponse } from '../_lib/security.js';
 
 export default async function handler(req, res) {
     if (handleCORS(req, res)) return;

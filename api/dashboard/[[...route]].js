@@ -8,9 +8,9 @@
  * /api/dashboard/session (POST)
  */
 
-import { executeQuery } from '../../_lib/db.js';
-import { handleCORS, errorResponse } from '../../_lib/security.js';
-import { requireAuth } from '../../_lib/auth.js';
+import { executeQuery } from '../_lib/db.js';
+import { handleCORS, errorResponse } from '../_lib/security.js';
+import { requireAuth } from '../_lib/auth.js';
 
 async function handler(req, res) {
     if (handleCORS(req, res)) return;
