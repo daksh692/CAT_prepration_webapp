@@ -4,9 +4,9 @@
  */
 
 import { executeQuery } from '../_lib/db.js';
-import { handleCORS, errorResponse, validateRequired } from '../_lib/security.js';
+import { handleCORS, errorResponse } from '../_lib/security.js';
 import { requireAuth } from '../_lib/auth.js';
-import { connectDB } from '../_lib/db.js'; // Need raw connection for internal fetch
+import { connectDB } from '../../_lib/db.js'; // Need raw connection for internal fetch
 
 async function handler(req, res) {
     // Handle CORS
