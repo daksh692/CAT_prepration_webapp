@@ -4,6 +4,38 @@
     "framework": "vite",
     "rewrites": [
         {
+            "source": "/api/modules/(.*)",
+            "destination": "/api/modules?route=$1"
+        },
+        {
+            "source": "/api/modules",
+            "destination": "/api/modules?route="
+        },
+        {
+            "source": "/api/chapters/(.*)",
+            "destination": "/api/chapters?route=$1"
+        },
+        {
+            "source": "/api/chapters",
+            "destination": "/api/chapters?route="
+        },
+        {
+            "source": "/api/dashboard/(.*)",
+            "destination": "/api/dashboard?route=$1"
+        },
+        {
+            "source": "/api/dashboard",
+            "destination": "/api/dashboard?route="
+        },
+        {
+            "source": "/api/study/(.*)",
+            "destination": "/api/study?route=$1"
+        },
+        {
+            "source": "/api/study",
+            "destination": "/api/study?route="
+        },
+        {
             "source": "/api/(.*)",
             "destination": "/api/$1"
         },
