@@ -3,7 +3,7 @@
  * POST /api/auth/register
  */
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { executeQuery } from '../_lib/db.js';
 import { handleCORS, validateRequired, errorResponse } from '../_lib/security.js';
