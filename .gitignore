@@ -48,6 +48,9 @@ server/verify-*.js
 server/compare-*.js
 server/fix-*.js
 
+# Scripts utils
+scripts/
+
 # Audit logs (contain sensitive information)
 logs/
 server/logs/
