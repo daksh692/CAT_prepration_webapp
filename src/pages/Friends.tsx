@@ -113,7 +113,7 @@ export default function Friends() {
     };
 
     const handleViewStats = async (friendId: number) => {
-        setSelectedFriend(friendId);
+
         setShowAnalytics(true);
         setAnalyticsLoading(true);
         try {
