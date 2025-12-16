@@ -3,7 +3,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { testConnection } = require('./config/database');
-require('dotenv').config();
+const path = require('path');
+// Load env vars from server/.env or root .env
+require('dotenv').config(); 
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
