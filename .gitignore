@@ -26,8 +26,10 @@ dist-ssr
 # Environment files (contain sensitive credentials)
 .env
 .env.*
+!.env.example
 server/.env
 server/.env.*
+!server/.env.example
 
 # Database backups and seed data (not needed in version control)
 backups/

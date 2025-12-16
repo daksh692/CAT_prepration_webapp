@@ -16,22 +16,22 @@ const pool = mysql.createPool({
 
 // Explicit offline config for migration scripts
 const offlineConfig = {
-    host: '127.0.0.1',
-    user: 'root',
-    password: '',
-    database: 'catprep_tracker',
-    port: 3306,
+    host: process.env.OFFLINE_DB_HOST || '127.0.0.1',
+    user: process.env.OFFLINE_DB_USER || 'root',
+    password: process.env.OFFLINE_DB_PASSWORD || '',
+    database: process.env.OFFLINE_DB_NAME || 'catprep_tracker',
+    port: parseInt(process.env.OFFLINE_DB_PORT) || 3306,
     waitForConnections: true,
     connectionLimit: 5
 };
 
 // Explicit online config for migration scripts
 const onlineConfig = {
-    host: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
-    port: 4000,
-    user: 'oCyrDjqb6U8VJzA.root',
-    password: 'bKih61o1qxYQOVlr',
-    database: 'catprep_production',
+    host: process.env.ONLINE_DB_HOST,
+    port: parseInt(process.env.ONLINE_DB_PORT) || 4000,
+    user: process.env.ONLINE_DB_USER,
+    password: process.env.ONLINE_DB_PASSWORD,
+    database: process.env.ONLINE_DB_NAME,
     ssl: { rejectUnauthorized: true },
     waitForConnections: true,
     connectionLimit: 5
