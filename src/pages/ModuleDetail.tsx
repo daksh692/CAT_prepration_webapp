@@ -272,7 +272,7 @@ export default function ModuleDetail() {
                                     </div>
 
                                     {/* Skip Test Score */}
-                                    {chapter.skipped && chapter.skip_test_score && (
+                                    {chapter.skipped && chapter.skip_test_score !== null && (
                                         <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                                             <p className="text-sm text-purple-700">
                                                 <strong>Skip Test Score:</strong> {chapter.skip_test_score}%

@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files (contain sensitive credentials)
+.env
+.env.*
+server/.env
+server/.env.*
+
+# Database backups and seed data (not needed in version control)
+backups/
+server/seed/
+server/migrations/*.sql
+
+# Temporary migration scripts (keep only master-migrate.js)
+server/*-migrate*.js
+!server/master-migrate.js
+server/check-*.js
+server/verify-*.js
+server/compare-*.js
+server/fix-*.js

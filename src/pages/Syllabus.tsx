@@ -161,7 +161,7 @@ export default function Syllabus() {
                                             {/* Progress placeholder */}
                                             <div className="mt-3">
                                                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                                    <span>0 / 0 chapters</span>
+                                                    <span>{module.chapterCount || 0} chapters</span>
                                                     <span>0%</span>
                                                 </div>
                                                 <div className="w-full bg-gray-200 rounded-full h-2">

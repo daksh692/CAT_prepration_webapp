@@ -10,6 +10,55 @@ router.use(authenticateToken);
 // STUDY SESSION ENDPOINTS
 // =================================
 
+
+// Get chapters that have study materials (videos, notes, etc.)
+router.get('/chapters-with-materials', async (req, res) => {
+    try {
+        const [chapters] = await pool.query(`
+            SELECT DISTINCT c.id, c.module_id, c.name 
+            FROM chapters c
+            WHERE EXISTS (SELECT 1 FROM study_materials sm WHERE sm.chapter_id = c.id)
+               OR EXISTS (SELECT 1 FROM study_pointers sp WHERE sp.chapter_id = c.id)
+               OR EXISTS (SELECT 1 FROM study_formulas sf WHERE sf.chapter_id = c.id)
+               OR EXISTS (SELECT 1 FROM study_examples se WHERE se.chapter_id = c.id)
+               OR EXISTS (SELECT 1 FROM study_practice_problems spp WHERE spp.chapter_id = c.id)
+        `);
+        res.json(chapters);
+    } catch (error) {
+        console.error('Error fetching chapters with materials:', error);
+        res.status(500).json({ error: 'Failed to fetch chapters with materials' });
+    }
+});
+
+// Get all study materials for a specific chapter
+router.get('/chapter/:chapterId', async (req, res) => {
+    try {
+        const { chapterId } = req.params;
+        
+        // Fetch all types of study materials in parallel
+        const [materials, pointers, formulas, examples, practice, notes] = await Promise.all([
+            pool.query('SELECT * FROM study_materials WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
+            pool.query('SELECT * FROM study_pointers WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
+            pool.query('SELECT * FROM study_formulas WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
+            pool.query('SELECT * FROM study_examples WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
+            pool.query('SELECT * FROM study_practice_problems WHERE chapter_id = ? ORDER BY id', [chapterId]),
+            pool.query('SELECT * FROM study_notes WHERE chapter_id = ? ORDER BY `order`', [chapterId])
+        ]);
+        
+        res.json({
+            materials: materials[0],
+            pointers: pointers[0],
+            formulas: formulas[0],
+            examples: examples[0],
+            practice: practice[0],
+            notes: notes[0]
+        });
+    } catch (error) {
+        console.error('Error fetching study materials:', error);
+        res.status(500).json({ error: 'Failed to fetch study materials' });
+    }
+});
+
 // Get session history (last N days) for logged-in user
 router.get('/sessions/history', async (req, res) => {
     try {

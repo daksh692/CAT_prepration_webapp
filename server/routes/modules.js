@@ -5,9 +5,15 @@ const { pool } = require('../config/database');
 // GET all modules
 router.get('/', async (req, res) => {
     try {
-        const [modules] = await pool.query(
-            'SELECT * FROM modules ORDER BY `order`'
-        );
+        const [modules] = await pool.query(`
+            SELECT 
+                m.*,
+                COUNT(c.id) as chapterCount
+            FROM modules m
+            LEFT JOIN chapters c ON m.id = c.module_id
+            GROUP BY m.id
+            ORDER BY m.\`order\`
+        `);
         res.json(modules);
     } catch (error) {
         console.error('Error fetching modules:', error);

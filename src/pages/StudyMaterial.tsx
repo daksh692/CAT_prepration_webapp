@@ -77,7 +77,7 @@ export default function StudyMaterial() {
         );
     }
 
-    if (!studyData || !studyData.material) {
+    if (!studyData || (!studyData.materials && !studyData.pointers && !studyData.formulas && !studyData.examples && !studyData.practice)) {
         return (
             <div className="text-center py-20">
                 <p className="text-gray-500 mb-4">Study material not available for this chapter yet.</p>
@@ -91,7 +91,64 @@ export default function StudyMaterial() {
         );
     }
 
-    const { material, videos, pointers, formulas, examples, practiceProblems } = studyData;
+    // Backend returns: { materials, pointers, formulas, examples, practice, notes }
+    const materials = studyData.materials || [];
+    const videos = materials.filter((m: any) => m.type === 'video');
+    const pointers = studyData.pointers || [];
+    const formulas = studyData.formulas || [];
+    const examples = studyData.examples || [];
+    const practiceProblems = studyData.practice || [];
+    const notes = studyData.notes || [];
+
+    // Convert markdown-style text to HTML
+    const convertMarkdownToHTML = (text: string): string => {
+        if (!text) return '';
+
+        let html = text;
+
+        // Convert **text** to <strong>text</strong>
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        // Convert bullet points (•) to proper list items
+        const lines = html.split('\n');
+        let inList = false;
+        const processedLines = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+
+            if (line.startsWith('•')) {
+                if (!inList) {
+                    processedLines.push('<ul class="list-disc ml-6 my-4 space-y-2">');
+                    inList = true;
+                }
+                processedLines.push(`<li class="text-gray-700">${line.substring(1).trim()}</li>`);
+            } else {
+                if (inList) {
+                    processedLines.push('</ul>');
+                    inList = false;
+                }
+                if (line) {
+                    processedLines.push(`<p class="mb-3">${line}</p>`);
+                }
+            }
+        }
+
+        if (inList) {
+            processedLines.push('</ul>');
+        }
+
+        return processedLines.join('');
+    };
+
+    // Create material object for notes display
+    // Backend returns plain text with markdown-style formatting
+    const material = notes.length > 0
+        ? {
+            brief_notes: convertMarkdownToHTML(notes[0].brief_notes),
+            detailed_notes: notes[0].detailed_notes  // This one has proper HTML
+        }
+        : { brief_notes: 'No notes available yet.', detailed_notes: '' };
 
     const tabs: { id: Tab; label: string; icon: string }[] = [
         { id: 'videos', label: 'Videos', icon: '📹' },
@@ -195,8 +252,10 @@ export default function StudyMaterial() {
                                     <span className="text-3xl">📌</span>
                                     <h3 className="font-bold text-xl text-blue-900">Quick Summary</h3>
                                 </div>
-                                <div className="prose prose-blue max-w-none">
-                                    <p className="text-gray-800 text-lg leading-relaxed whitespace-pre-line">{material.brief_notes}</p>
+                                <div className="prose prose-lg prose-blue max-w-none prose-headings:text-blue-900 prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-6 prose-h2:mb-4 prose-h3:text-xl prose-h3:font-semibold prose-h3:mt-4 prose-h3:mb-3 prose-h4:text-lg prose-h4:font-medium prose-h4:mt-3 prose-h4:mb-2 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4 prose-ul:my-4 prose-ul:ml-6 prose-li:mb-2 prose-strong:text-blue-800 prose-strong:font-bold prose-table:my-4 prose-table:border-collapse prose-th:bg-blue-100 prose-th:p-3 prose-th:border prose-th:border-blue-300 prose-td:p-3 prose-td:border prose-td:border-gray-300">
+                                    <div
+                                        dangerouslySetInnerHTML={{ __html: material.brief_notes }}
+                                    />
                                 </div>
                             </div>
 
