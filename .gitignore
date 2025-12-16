@@ -27,6 +27,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.vercel.example
 server/.env
 server/.env.*
 !server/.env.example
