@@ -1,56 +1,43 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// Create connection pool
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || process.env.TIDB_HOST || '127.0.0.1',
-    user: process.env.DB_USER || process.env.TIDB_USER || 'root',
-    password: process.env.DB_PASSWORD || process.env.TIDB_PASSWORD || '',
-    database: process.env.DB_NAME || process.env.TIDB_DB_NAME || 'catprep_tracker',
-    port: process.env.DB_PORT || process.env.TIDB_PORT || 3306,
-    ssl: (process.env.DB_SSL === 'true' || process.env.TIDB_HOST) ? { rejectUnauthorized: true } : undefined,
+// Helper to create a MySQL pool based on a given environment variable prefix
+function createPool(prefix) {
+  const host = process.env[`${prefix}HOST`];
+  const port = parseInt(process.env[`${prefix}PORT`]) || 3306;
+  const user = process.env[`${prefix}USER`];
+  const password = process.env[`${prefix}PASSWORD`];
+  const database = process.env[`${prefix}NAME`];
+  const sslEnabled = process.env[`${prefix}SSL`] === 'true' || (host && host.includes('tidbcloud.com'));
+  return mysql.createPool({
+    host: host || '127.0.0.1',
+    port,
+    user: user || 'root',
+    password: password || '',
+    database: database || 'catprep_tracker',
+    ssl: sslEnabled ? { rejectUnauthorized: true } : undefined,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
-});
-
-// Explicit offline config for migration scripts
-const offlineConfig = {
-    host: process.env.OFFLINE_DB_HOST || '127.0.0.1',
-    user: process.env.OFFLINE_DB_USER || 'root',
-    password: process.env.OFFLINE_DB_PASSWORD || '',
-    database: process.env.OFFLINE_DB_NAME || 'catprep_tracker',
-    port: parseInt(process.env.OFFLINE_DB_PORT) || 3306,
-    waitForConnections: true,
-    connectionLimit: 5
-};
-
-// Explicit online config for migration scripts
-const onlineConfig = {
-    host: process.env.ONLINE_DB_HOST,
-    port: parseInt(process.env.ONLINE_DB_PORT) || 4000,
-    user: process.env.ONLINE_DB_USER,
-    password: process.env.ONLINE_DB_PASSWORD,
-    database: process.env.ONLINE_DB_NAME,
-    ssl: { rejectUnauthorized: true },
-    waitForConnections: true,
-    connectionLimit: 5
-};
-
-// Test connection
-async function testConnection() {
-    try {
-        const connection = await pool.getConnection();
-        console.log('✅ Database connected successfully!');
-        connection.release();
-    } catch (error) {
-        console.error('❌ Database connection failed:', error.message);
-        // Don't exit process in dev mode to allow diagnosing authentication issues
-        if (process.env.NODE_ENV === 'production') {
-             // console.error('   Exiting...'); 
-             // process.exit(1); 
-        }
-    }
+    queueLimit: 0,
+  });
 }
 
-module.exports = { pool, testConnection, offlineConfig, onlineConfig };
+// Export pools for online (production) and offline (development) environments
+const onlinePool = createPool('ONLINE_DB_');
+const offlinePool = createPool('DB_');
+// Default pool used by existing code (fallback to offline)
+const pool = offlinePool;
+
+// Test connection helper – accepts a pool (defaults to the default pool)
+async function testConnection(p = pool) {
+  try {
+    const conn = await p.getConnection();
+    console.log('✅ Database connected successfully!');
+    await conn.release();
+  } catch (err) {
+    console.error('❌ Database connection failed:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { onlinePool, offlinePool, pool, testConnection };

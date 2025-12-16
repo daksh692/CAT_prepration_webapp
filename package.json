@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "vercel-build": "npm run build"
+    "vercel-build": "npm run build",
+    "start:online": "node server/index_online.js",
+    "start:offline": "node server/index_offline.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
