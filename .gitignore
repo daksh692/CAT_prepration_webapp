@@ -36,6 +36,8 @@ server/.env.*
 backups/
 server/seed/
 server/migrations/*.sql
+cap_tracker_schema_only.sql
+test_data.sql
 
 # Temporary migration scripts (keep only master-migrate.js)
 server/*-migrate*.js
@@ -48,3 +50,4 @@ server/fix-*.js
 # Audit logs (contain sensitive information)
 logs/
 server/logs/
+

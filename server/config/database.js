@@ -40,4 +40,22 @@ async function testConnection(p = pool) {
   }
 }
 
-module.exports = { onlinePool, offlinePool, pool, testConnection };
+// Config objects for migration scripts (no pool, just config)
+const offlineConfig = {
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: parseInt(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'catprep_tracker'
+};
+
+const onlineConfig = {
+  host: process.env.ONLINE_DB_HOST,
+  port: parseInt(process.env.ONLINE_DB_PORT) || 4000,
+  user: process.env.ONLINE_DB_USER,
+  password: process.env.ONLINE_DB_PASSWORD,
+  database: process.env.ONLINE_DB_NAME,
+  ssl: { rejectUnauthorized: true }
+};
+
+module.exports = { onlinePool, offlinePool, pool, testConnection, offlineConfig, onlineConfig };
