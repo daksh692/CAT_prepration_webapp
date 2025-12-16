@@ -3,9 +3,9 @@
  * GET /api/dashboard/streak
  */
 
-import { executeQuery } from '../../_lib/db.js';
-import { handleCORS, errorResponse } from '../../_lib/security.js';
-import { requireAuth } from '../../_lib/auth.js';
+import { executeQuery } from '../_lib/db.js';
+import { handleCORS, errorResponse } from '../_lib/security.js';
+import { requireAuth } from '../_lib/auth.js';
 
 async function handler(req, res) {
     // Handle CORS
