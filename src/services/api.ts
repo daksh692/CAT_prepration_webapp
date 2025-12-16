@@ -1,5 +1,7 @@
 // API Configuration
-const API_BASE_URL = 'http://localhost:5000/api';
+// API Configuration
+// in production use relative path /api (Vercel functions), in dev use localhost:5000
+const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:5000/api';
 
 // API Service - Centralized API calls
 class ApiService {
