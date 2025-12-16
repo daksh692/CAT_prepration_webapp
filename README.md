@@ -183,15 +183,44 @@ cd server
 
 ### 4️⃣ Environment Configuration
 
-**Create `server/.env`:**
-```env
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=catprep_db
-JWT_SECRET=your_super_secret_jwt_key_here
-PORT=5000
+**Copy the template and configure:**
+```bash
+cp server/.env.example server/.env
 ```
+
+**Edit `server/.env` with your credentials:**
+```env
+# Main Database (TiDB Cloud for production)
+DB_HOST=your_tidb_host
+DB_PORT=4000
+DB_USER=your_tidb_username
+DB_PASSWORD=your_tidb_password
+DB_NAME=catprep_production
+DB_SSL=true
+
+# Offline Database (Local MySQL for development)
+OFFLINE_DB_HOST=127.0.0.1
+OFFLINE_DB_PORT=3306
+OFFLINE_DB_USER=root
+OFFLINE_DB_PASSWORD=your_mysql_password
+OFFLINE_DB_NAME=catprep_tracker
+
+# Online Database (TiDB Cloud)
+ONLINE_DB_HOST=your_tidb_host
+ONLINE_DB_PORT=4000
+ONLINE_DB_USER=your_tidb_username
+ONLINE_DB_PASSWORD=your_tidb_password
+ONLINE_DB_NAME=catprep_production
+
+# Server Configuration
+PORT=5000
+NODE_ENV=development
+
+# JWT Secret (generate a strong random string)
+JWT_SECRET=your_super_secret_jwt_key_here
+```
+
+**⚠️ IMPORTANT:** Never commit your `.env` file to version control!
 
 ### 5️⃣ Seed Database (Optional)
 ```bash
@@ -216,13 +245,16 @@ npm run dev
 
 ---
 
-## 👤 Default Accounts
+## 👤 Getting Started
 
-### Student Account (Test Account)
-> This is a test account you can use to browse around the website to track your own exam progress. For personal use, registration and login with your own account is recommended.
+### Create Your Account
+1. Navigate to http://localhost:5173
+2. Click "Register" to create your account
+3. Fill in your details and set a strong password
+4. Login with your credentials
 
-- **Email:** `student@catprep.com`
-- **Password:** `student123`
+### First Admin Account
+The first registered user automatically becomes an admin. Subsequent admins can be created through the admin dashboard.
 
 ---
 
@@ -320,12 +352,26 @@ CATPrep-Web/
 
 ## 🔐 Security Features
 
-- ✅ JWT-based authentication
-- ✅ Password hashing (bcrypt)
-- ✅ Protected API routes
-- ✅ User-specific data isolation
-- ✅ Role-based access control (Admin/Student)
-- ✅ Secure session management
+### Authentication & Authorization
+- ✅ **JWT-based authentication** - Secure token-based auth
+- ✅ **Password hashing** - bcrypt with salt rounds
+- ✅ **Protected API routes** - Middleware authentication
+- ✅ **Role-based access control** - Admin/Student permissions
+- ✅ **Secure session management** - Token expiration
+
+### Data Security
+- ✅ **User-specific data isolation** - Users only see their own data
+- ✅ **Environment variables** - No hardcoded credentials
+- ✅ **SSL/TLS encryption** - Secure database connections
+- ✅ **Input validation** - Prevent SQL injection
+- ✅ **CORS configuration** - Controlled cross-origin requests
+
+### Best Practices
+- 🔒 **Never commit `.env` files** - Use `.env.example` as template
+- 🔒 **Rotate JWT secrets regularly** - Update in production
+- 🔒 **Use strong passwords** - Minimum 8 characters
+- 🔒 **Keep dependencies updated** - Regular security patches
+- 🔒 **TiDB Cloud SSL** - Always use encrypted connections
 
 ---
 
