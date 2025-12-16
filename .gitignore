@@ -38,6 +38,7 @@ server/seed/
 server/migrations/*.sql
 cap_tracker_schema_only.sql
 test_data.sql
+insert_users.sql
 
 # Temporary migration scripts (keep only master-migrate.js)
 server/*-migrate*.js

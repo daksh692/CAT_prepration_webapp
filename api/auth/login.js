@@ -20,27 +20,40 @@ export default async function handler(req, res) {
     try {
         const { email, password } = req.body;
         
+        console.log('[LOGIN] Attempting login for email:', email);
+        
         // Validate required fields
-        validateRequired(req.body, ['email', 'password']);
+        try {
+            validateRequired(req.body, ['email', 'password']);
+        } catch (validationError) {
+            console.error('[LOGIN] Validation error:', validationError.message);
+            return errorResponse(res, 400, validationError.message);
+        }
         
         // Find user
+        console.log('[LOGIN] Querying database for user...');
         const users = await executeQuery(
             'SELECT * FROM users WHERE email = ?',
             [email]
         );
         
         if (users.length === 0) {
+            console.error('[LOGIN] No user found with email:', email);
             return errorResponse(res, 401, 'Invalid credentials');
         }
         
         const user = users[0];
+        console.log('[LOGIN] User found, verifying password...');
         
         // Verify password
         const validPassword = await bcrypt.compare(password, user.password);
         
         if (!validPassword) {
+            console.error('[LOGIN] Invalid password for user:', email);
             return errorResponse(res, 401, 'Invalid credentials');
         }
+        
+        console.log('[LOGIN] Password verified, generating JWT...');
         
         // Generate JWT token
         const token = jwt.sign(
