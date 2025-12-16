@@ -11,8 +11,11 @@
     "vercel-build": "npm run build"
   },
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
