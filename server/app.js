@@ -25,14 +25,14 @@ function createApp(dbPool) {
   // Rate limiting
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 3000, // Increased for dev/testing
     message: 'Too many requests from this IP, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
   });
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 100, // Increased for dev
     message: 'Too many login attempts, please try again after 15 minutes.',
     skipSuccessfulRequests: true,
   });

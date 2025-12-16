@@ -23,7 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment files (contain sensitive credentials)
+ # Environment files (contain sensitive credentials)
 .env
 .env.*
 !.env.example

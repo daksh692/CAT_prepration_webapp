@@ -9,6 +9,7 @@ function createPool(prefix) {
   const password = process.env[`${prefix}PASSWORD`];
   const database = process.env[`${prefix}NAME`];
   const sslEnabled = process.env[`${prefix}SSL`] === 'true' || (host && host.includes('tidbcloud.com'));
+
   return mysql.createPool({
     host: host || '127.0.0.1',
     port,

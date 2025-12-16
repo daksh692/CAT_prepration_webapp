@@ -13,6 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 router.post('/register', async (req, res) => {
     try {
         const { email, password, name } = req.body;
+        console.log(`[REGISTER] Attempting registration for: ${email}`);
         
         // Validation
         if (!email || !password || !name) {
@@ -26,6 +27,7 @@ router.post('/register', async (req, res) => {
         // Check if user already exists
         const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
         if (existing.length > 0) {
+            console.log(`[REGISTER] Email already exists: ${email}`);
             return res.status(400).json({ error: 'Email already registered' });
         }
         
@@ -59,10 +61,14 @@ router.post('/register', async (req, res) => {
         }
         
         // Insert user (role defaults to 'user')
+        // Schema uses BIGINT(20) for timestamps, so use Date.now() (ms)
+        const now = Date.now();
         const [result] = await pool.query(
-            'INSERT INTO users (email, password, name, role, friend_code) VALUES (?, ?, ?, ?, ?)',
-            [email, hashedPassword, name, 'user', friendCode]
+            'INSERT INTO users (email, password, name, role, friend_code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [email, hashedPassword, name, 'user', friendCode, now, now]
         );
+        
+        console.log(`[REGISTER] User registered successfully: ID ${result.insertId}`);
         
         // Generate token (no expiration - persists until logout)
         const token = jwt.sign(
@@ -84,8 +90,8 @@ router.post('/register', async (req, res) => {
             user
         });
     } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ error: 'Registration failed' });
+        console.error('[REGISTER] Registration error:', error);
+        res.status(500).json({ error: 'Registration failed', details: error.message });
     }
 });
 
