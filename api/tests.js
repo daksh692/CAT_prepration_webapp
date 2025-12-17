@@ -82,6 +82,44 @@ async function handler(req, res) {
             return res.status(200).json({ results, summary });
         }
         
+        // POST /api/tests/results/website
+        if (req.method === 'POST' && pathParts[0] === 'results' && pathParts[1] === 'website') {
+            const { 
+                chapter_id, 
+                correct_mcq, 
+                incorrect_mcq, 
+                unattempted_mcq = 0
+            } = req.body;
+            
+            const totalQuestions = correct_mcq + incorrect_mcq + unattempted_mcq;
+            const marks = calculateCATMarks({ correct_mcq, incorrect_mcq, unattempted_mcq });
+            const today = new Date().toISOString().split('T')[0];
+            const now = Date.now();
+            
+            // Get chapter info for section
+            const [ch] = await executeQuery(
+                'SELECT c.id, m.section FROM chapters c LEFT JOIN modules m ON c.module_id = m.id WHERE c.id = ?',
+                [chapter_id]
+            );
+            const section = ch && ch.length > 0 ? ch[0].section : null;
+            
+            await executeQuery(
+                `INSERT INTO test_results 
+                 (user_id, test_date, chapter_id, section, total_questions, test_type,
+                  correct_mcq, incorrect_mcq, correct_fitb, incorrect_fitb,
+                  total_marks, max_marks, percentage, created_at) 
+                 VALUES (?, ?, ?, ?, ?, 'website', ?, ?, 0, 0, ?, ?, ?, ?)`,
+                [userId, today, chapter_id, section, totalQuestions,
+                 correct_mcq, incorrect_mcq,
+                 marks.total_marks, marks.max_marks, marks.percentage, now]
+            );
+            
+            return res.status(200).json({ 
+                message: 'Website test result recorded successfully',
+                marks: marks
+            });
+        }
+        
         // POST /api/tests/results/external
         if (req.method === 'POST' && pathParts[0] === 'results' && pathParts[1] === 'external') {
             const { 
