@@ -29,6 +29,9 @@ const offlinePool = createPool('DB_');
 // Default pool used by existing code (fallback to offline)
 const pool = offlinePool;
 
+
+
+
 // Test connection helper – accepts a pool (defaults to the default pool)
 async function testConnection(p = pool) {
   try {
