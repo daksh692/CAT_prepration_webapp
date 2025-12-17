@@ -53,7 +53,129 @@ async function handler(req, res) {
             });
         }
         
+        // Case 3: GET /api/study/sessions/history
+        if (pathParts[0] === 'sessions' && pathParts[1] === 'history') {
+            const userId = req.user?.id;
+            if (!userId) return errorResponse(res, 401, 'Unauthorized');
+
+            
+            const days = parseInt(req.query.days) || 7;
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            const startDateStr = startDate.toISOString().split('T')[0];
+            
+            const sessions = await executeQuery(
+                `SELECT s.*, c.name as chapter_name, m.name as module_name, m.section
+                 FROM study_sessions s
+                 LEFT JOIN chapters c ON s.chapter_id = c.id
+                 LEFT JOIN modules m ON c.module_id = m.id
+                 WHERE s.user_id = ? AND s.date >= ?
+                 ORDER BY s.date DESC, s.created_at DESC`,
+                [userId, startDateStr]
+            );
+            
+            const sessionsByDay = {};
+            let weekTotalMinutes = 0;
+            let weekTotalQuestions = 0;
+            
+            sessions.forEach(session => {
+                const date = new Date(session.date).toISOString().split('T')[0];
+                if (!sessionsByDay[date]) {
+                    sessionsByDay[date] = {
+                        date,
+                        total_minutes: 0,
+                        total_questions: 0,
+                        session_count: 0,
+                        sessions: []
+                    };
+                }
+                
+                sessionsByDay[date].total_minutes += session.duration;
+                sessionsByDay[date].total_questions += session.questions_completed;
+                sessionsByDay[date].session_count++;
+                sessionsByDay[date].sessions.push(session);
+                
+                weekTotalMinutes += session.duration;
+                weekTotalQuestions += session.questions_completed;
+            });
+            
+            return res.status(200).json({
+                sessions_by_day: Object.values(sessionsByDay),
+                week_total_minutes: weekTotalMinutes,
+                week_total_questions: weekTotalQuestions,
+                days_studied: Object.keys(sessionsByDay).length
+            });
+        }
+        
+        // Case 4: GET /api/study/sessions/today
+        if (pathParts[0] === 'sessions' && pathParts[1] === 'today') {
+            const userId = req.user?.id;
+            if (!userId) return errorResponse(res, 401, 'Unauthorized');
+            
+            const today = new Date().toISOString().split('T')[0];
+            
+            const sessions = await executeQuery(
+                `SELECT s.*, c.name as chapter_name, m.name as module_name, m.section
+                 FROM study_sessions s
+                 LEFT JOIN chapters c ON s.chapter_id = c.id
+                 LEFT JOIN modules m ON c.module_id = m.id
+                 WHERE s.user_id = ? AND s.date = ?
+                 ORDER BY s.created_at DESC`,
+                [userId, today]
+            );
+            
+            return res.status(200).json({ sessions, count: sessions.length });
+        }
+        
+        // Case 5: GET /api/study/analytics/weekly
+        if (pathParts[0] === 'analytics' && pathParts[1] === 'weekly') {
+            const userId = req.user?.id;
+            if (!userId) return errorResponse(res, 401, 'Unauthorized');
+            
+            const days = 7;
+            const dataPoints = [];
+            
+            for (let i = days - 1; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+                
+                const result = await executeQuery(
+                    `SELECT 
+                        COALESCE(SUM(duration), 0) as total_minutes,
+                        COALESCE(SUM(questions_completed), 0) as total_questions,
+                        COUNT(*) as session_count
+                     FROM study_sessions
+                     WHERE user_id = ? AND date = ?`,
+                    [userId, dateStr]
+                );
+                
+                dataPoints.push({
+                    date: dateStr,
+                    day_name: date.toLocaleDateString('en-US', { weekday: 'short' }),
+                    total_minutes: result[0]?.total_minutes || 0,
+                    total_questions: result[0]?.total_questions || 0,
+                    session_count: result[0]?.session_count || 0
+                });
+            }
+            
+            const totalMinutes = dataPoints.reduce((sum, day) => sum + day.total_minutes, 0);
+            const totalQuestions = dataPoints.reduce((sum, day) => sum + day.total_questions, 0);
+            const avgMinutesPerDay = Math.round(totalMinutes / days);
+            
+            return res.status(200).json({
+                data_points: dataPoints,
+                summary: {
+                    total_minutes: totalMinutes,
+                    total_questions: totalQuestions,
+                    avg_minutes_per_day: avgMinutesPerDay,
+                    days_studied: dataPoints.filter(d => d.total_minutes > 0).length
+                }
+            });
+        }
+        
         return errorResponse(res, 404, 'Endpoint not found');
+
         
     } catch (error) {
         console.error('Study API error:', error);
