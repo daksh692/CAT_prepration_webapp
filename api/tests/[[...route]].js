@@ -96,12 +96,20 @@ async function handler(req, res) {
             const today = new Date().toISOString().split('T')[0];
             const now = Date.now();
             
-            // Get chapter info for section
-            const [ch] = await executeQuery(
-                'SELECT c.id, m.section FROM chapters c LEFT JOIN modules m ON c.module_id = m.id WHERE c.id = ?',
-                [chapter_id]
-            );
-            const section = ch && ch.length > 0 ? ch[0].section : null;
+            // Get chapter info for section (with timeout protection)
+            let section = null;
+            if (chapter_id) {
+                try {
+                    const ch = await executeQuery(
+                        'SELECT m.section FROM chapters c LEFT JOIN modules m ON c.module_id = m.id WHERE c.id = ? LIMIT 1',
+                        [chapter_id]
+                    );
+                    section = ch && ch.length > 0 ? ch[0].section : null;
+                } catch (err) {
+                    console.error('Chapter lookup error:', err);
+                    // Continue without section if lookup fails
+                }
+            }
             
             await executeQuery(
                 `INSERT INTO test_results 
