@@ -1,65 +1,24 @@
-const mysql = require('mysql2/promise');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
-// Helper to create a MySQL pool based on a given environment variable prefix
-function createPool(prefix) {
-  const host = process.env[`${prefix}HOST`];
-  const port = parseInt(process.env[`${prefix}PORT`]) || 3306;
-  const user = process.env[`${prefix}USER`];
-  const password = process.env[`${prefix}PASSWORD`];
-  const database = process.env[`${prefix}NAME`];
-  const sslEnabled = process.env[`${prefix}SSL`] === 'true' || (host && host.includes('tidbcloud.com'));
+// Get the URI from environment variables depending on production/development
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/catprep';
 
-  return mysql.createPool({
-    host: host || '127.0.0.1',
-    port,
-    user: user || 'root',
-    password: password || '',
-    database: database || 'catprep_tracker',
-    ssl: sslEnabled ? { rejectUnauthorized: true } : undefined,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-  });
-}
-
-// Export pools for online (production) and offline (development) environments
-const onlinePool = createPool('ONLINE_DB_');
-const offlinePool = createPool('DB_');
-// Default pool used by existing code (fallback to offline)
-const pool = offlinePool;
-
-
-
-
-// Test connection helper – accepts a pool (defaults to the default pool)
-async function testConnection(p = pool) {
+async function connectDB() {
   try {
-    const conn = await p.getConnection();
-    console.log('✅ Database connected successfully!');
-    await conn.release();
+    await mongoose.connect(MONGODB_URI, {
+      // Removed serverApi: strict: true as it causes APIStrictError with Mongoose
+    });
+    console.log('✅ Secondary DB Check: MongoDB connected successfully!');
   } catch (err) {
-    console.error('❌ Database connection failed:', err.message);
-    throw err;
+    console.error('❌ MongoDB connection failed:', err.message);
+    process.exit(1);
   }
 }
 
-// Config objects for migration scripts (no pool, just config)
-const offlineConfig = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: parseInt(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'catprep_tracker'
-};
+// Replicate the testConnection and onlinePool mock interfaces for minimal disruption initially
+async function testConnection() {
+  await connectDB();
+}
 
-const onlineConfig = {
-  host: process.env.ONLINE_DB_HOST,
-  port: parseInt(process.env.ONLINE_DB_PORT) || 4000,
-  user: process.env.ONLINE_DB_USER,
-  password: process.env.ONLINE_DB_PASSWORD,
-  database: process.env.ONLINE_DB_NAME,
-  ssl: { rejectUnauthorized: true }
-};
-
-module.exports = { onlinePool, offlinePool, pool, testConnection, offlineConfig, onlineConfig };
+module.exports = { connectDB, testConnection };

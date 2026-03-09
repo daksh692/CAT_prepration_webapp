@@ -1,12 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config/database');
+const { User, Friendship, FriendRequest, TestResult } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 
 // All routes require authentication
 router.use(authenticateToken);
 
-// Helper function to generate unique friend code
 function generateFriendCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -19,17 +18,13 @@ function generateFriendCode() {
 // =================================
 // FRIEND CODE MANAGEMENT
 // =================================
-
-// Get my friend code
 router.get('/my-code', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const [user] = await pool.query(
-            'SELECT friend_code FROM users WHERE id = ?',
-            [userId]
-        );
-        
-        res.json({ code: user[0].friend_code });
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
+        const user = await User.findOne(isNaN(Number(userId)) ? { _id: userId } : { $or: [{ id: uIdNum }, { _id: userId }] }).lean();
+        res.json({ code: user ? user.friend_code : '' });
     } catch (error) {
         console.error('Error fetching friend code:', error);
         res.status(500).json({ error: 'Failed to fetch friend code' });
@@ -39,88 +34,42 @@ router.get('/my-code', async (req, res) => {
 // =================================
 // FRIEND REQUESTS
 // =================================
-
-// Send friend request
 router.post('/request', async (req, res) => {
     try {
-        const senderId = req.user.id;
+        const senderId = req.user.id || req.user._id;
+        const sIdNum = isNaN(Number(senderId)) ? 1 : Number(senderId);
+
         const { friendCode } = req.body;
         
         if (!friendCode || friendCode.length !== 12) {
             return res.status(400).json({ error: 'Invalid friend code' });
         }
         
-        // Find user with this code
-        const [receiver] = await pool.query(
-            'SELECT id FROM users WHERE friend_code = ?',
-            [friendCode]
-        );
-        
-        if (receiver.length === 0) {
+        const receiver = await User.findOne({ friend_code: friendCode }).lean();
+        if (!receiver) {
             return res.status(404).json({ error: 'User not found with this code' });
         }
         
-        const receiverId = receiver[0].id;
+        const rIdNum = receiver.id || 1;
         
-        // Can't add yourself
-        if (senderId === receiverId) {
+        if (sIdNum === rIdNum) {
             return res.status(400).json({ error: 'Cannot add yourself as a friend' });
         }
         
-        // Note: We don't check for existing friendship here because:
-        // 1. If they're friends, the earlier friendship check would prevent duplicate requests
-        // 2. If friendship was removed, they should be able to re-add
-        // 3. The unique constraint on friend_requests table prevents duplicate requests
-        
-        // Check for existing request
-        const [existingRequest] = await pool.query(
-            `SELECT id, status FROM friend_requests 
-             WHERE sender_id = ? AND receiver_id = ?`,
-            [senderId, receiverId]
-        );
-        
-        if (existingRequest.length > 0) {
-            if (existingRequest[0].status === 'pending') {
+        const existingRequest = await FriendRequest.findOne({ sender_id: sIdNum, receiver_id: rIdNum });
+        if (existingRequest) {
+            if (existingRequest.status === 'pending') {
                 return res.status(400).json({ error: 'Request already sent' });
-            } else if (existingRequest[0].status === 'rejected') {
-                // Allow re-request after rejection - update existing request
-                await pool.query(
-                    `UPDATE friend_requests 
-                     SET status = 'pending', created_at = ?, updated_at = NULL 
-                     WHERE id = ?`,
-                    [Date.now(), existingRequest[0].id]
-                );
+            } else if (existingRequest.status === 'rejected' || existingRequest.status === 'accepted') {
+                existingRequest.status = 'pending';
+                existingRequest.created_at = Date.now();
+                await existingRequest.save();
                 return res.json({ success: true, message: 'Friend request sent!' });
-            } else if (existingRequest[0].status === 'accepted') {
-                // Check if friendship actually exists (might have been removed)
-                const [friendship] = await pool.query(
-                    `SELECT id FROM friendships 
-                     WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
-                    [Math.min(senderId, receiverId), Math.max(senderId, receiverId),
-                     Math.min(senderId, receiverId), Math.max(senderId, receiverId)]
-                );
-                
-                if (friendship.length > 0) {
-                    return res.status(400).json({ error: 'You are already friends!' });
-                } else {
-                    // Friendship was removed, allow re-request - update existing request
-                    await pool.query(
-                        `UPDATE friend_requests 
-                         SET status = 'pending', created_at = ?, updated_at = NULL 
-                         WHERE id = ?`,
-                        [Date.now(), existingRequest[0].id]
-                    );
-                    return res.json({ success: true, message: 'Friend request sent!' });
-                }
             }
+        } else {
+            const newReq = new FriendRequest({ sender_id: sIdNum, receiver_id: rIdNum, status: 'pending', created_at: Date.now() });
+            await newReq.save();
         }
-        
-        // Create new request (no existing request found)
-        await pool.query(
-            `INSERT INTO friend_requests (sender_id, receiver_id, status, created_at) 
-             VALUES (?, ?, 'pending', ?)`,
-            [senderId, receiverId, Date.now()]
-        );
         
         res.json({ success: true, message: 'Friend request sent!' });
     } catch (error) {
@@ -129,62 +78,52 @@ router.post('/request', async (req, res) => {
     }
 });
 
-// Get pending requests (received)
 router.get('/requests/pending', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
+        const requests = await FriendRequest.find({ receiver_id: uIdNum, status: 'pending' }).sort({ created_at: -1 }).lean();
         
-        const [requests] = await pool.query(
-            `SELECT 
-                fr.id,
-                fr.created_at,
-                u.id as sender_id,
-                u.name as sender_name,
-                u.friend_code as sender_code
-             FROM friend_requests fr
-             JOIN users u ON fr.sender_id = u.id
-             WHERE fr.receiver_id = ? AND fr.status = 'pending'
-             ORDER BY fr.created_at DESC`,
-            [userId]
-        );
+        const userIds = requests.map(r => r.sender_id);
+        const users = await User.find({ id: { $in: userIds } }).lean();
+        const userMap = users.reduce((acc, u) => { acc[u.id] = u; return acc; }, {});
+
+        const formattedRequests = requests.map(r => ({
+            id: r._id,
+            created_at: r.created_at,
+            sender_id: r.sender_id,
+            sender_name: userMap[r.sender_id]?.name,
+            sender_code: userMap[r.sender_id]?.friend_code
+        }));
         
-        res.json({ requests });
+        res.json({ requests: formattedRequests });
     } catch (error) {
         console.error('Error fetching requests:', error);
         res.status(500).json({ error: 'Failed to fetch requests' });
     }
 });
 
-// Accept friend request
 router.post('/requests/:id/accept', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const requestId = req.params.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
+        const request = await FriendRequest.findOne({ _id: req.params.id, receiver_id: uIdNum, status: 'pending' });
+        if (!request) return res.status(404).json({ error: 'Request not found' });
         
-        // Get request details
-        const [request] = await pool.query(
-            'SELECT sender_id, receiver_id FROM friend_requests WHERE id = ? AND receiver_id = ? AND status = "pending"',
-            [requestId, userId]
-        );
+        const senderId = request.sender_id;
+        const receiverId = request.receiver_id;
         
-        if (request.length === 0) {
-            return res.status(404).json({ error: 'Request not found' });
-        }
+        await Friendship.create({ 
+            user1_id: Math.min(senderId, receiverId), 
+            user2_id: Math.max(senderId, receiverId), 
+            created_at: Date.now() 
+        });
         
-        const senderId = request[0].sender_id;
-        const receiverId = request[0].receiver_id;
-        
-        // Create friendship
-        await pool.query(
-            'INSERT INTO friendships (user1_id, user2_id, created_at) VALUES (?, ?, ?)',
-            [Math.min(senderId, receiverId), Math.max(senderId, receiverId), Date.now()]
-        );
-        
-        // Update request status
-        await pool.query(
-            'UPDATE friend_requests SET status = "accepted", updated_at = ? WHERE id = ?',
-            [Date.now(), requestId]
-        );
+        request.status = 'accepted';
+        request.updated_at = Date.now();
+        await request.save();
         
         res.json({ success: true, message: 'Friend request accepted!' });
     } catch (error) {
@@ -193,20 +132,17 @@ router.post('/requests/:id/accept', async (req, res) => {
     }
 });
 
-// Reject friend request
 router.post('/requests/:id/reject', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const requestId = req.params.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
+        const request = await FriendRequest.findOne({ _id: req.params.id, receiver_id: uIdNum, status: 'pending' });
+        if (!request) return res.status(404).json({ error: 'Request not found' });
         
-        const [result] = await pool.query(
-            'UPDATE friend_requests SET status = "rejected", updated_at = ? WHERE id = ? AND receiver_id = ? AND status = "pending"',
-            [Date.now(), requestId, userId]
-        );
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Request not found' });
-        }
+        request.status = 'rejected';
+        request.updated_at = Date.now();
+        await request.save();
         
         res.json({ success: true, message: 'Friend request rejected' });
     } catch (error) {
@@ -218,32 +154,30 @@ router.post('/requests/:id/reject', async (req, res) => {
 // =================================
 // FRIENDS LIST
 // =================================
-
-// Get my friends
 router.get('/', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
+        const friendships = await Friendship.find({ $or: [{ user1_id: uIdNum }, { user2_id: uIdNum }] }).lean();
+        const friendIds = friendships.map(f => f.user1_id === uIdNum ? f.user2_id : f.user1_id);
         
-        const [friends] = await pool.query(
-            `SELECT 
-                u.id,
-                u.name,
-                u.friend_code,
-                u.current_streak,
-                u.longest_streak,
-                AVG(t.percentage) as avg_score,
-                COUNT(t.id) as total_tests
-             FROM friendships f
-             JOIN users u ON (
-                (f.user1_id = ? AND u.id = f.user2_id) OR
-                (f.user2_id = ? AND u.id = f.user1_id)
-             )
-             LEFT JOIN test_results t ON u.id = t.user_id
-             WHERE f.user1_id = ? OR f.user2_id = ?
-             GROUP BY u.id, u.name, u.friend_code, u.current_streak, u.longest_streak
-             ORDER BY u.name`,
-            [userId, userId, userId, userId]
-        );
+        const friendsUsers = await User.find({ id: { $in: friendIds } }).lean();
+        const friendStats = await TestResult.aggregate([
+            { $match: { user_id: { $in: friendIds } } },
+            { $group: { _id: "$user_id", total_tests: { $sum: 1 }, avg_score: { $avg: "$percentage" } } }
+        ]);
+        const statsMap = friendStats.reduce((acc, s) => { acc[s._id] = s; return acc; }, {});
+
+        const friends = friendsUsers.map(u => ({
+            id: u.id,
+            name: u.name,
+            friend_code: u.friend_code,
+            current_streak: u.current_streak,
+            longest_streak: u.longest_streak,
+            avg_score: statsMap[u.id] ? statsMap[u.id].avg_score : 0,
+            total_tests: statsMap[u.id] ? statsMap[u.id].total_tests : 0
+        }));
         
         res.json({ friends });
     } catch (error) {
@@ -252,23 +186,19 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Remove friend
 router.delete('/:friendId', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const friendId = parseInt(req.params.friendId);
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+        const fId = Number(req.params.friendId);
+
+        const result = await Friendship.deleteOne({
+            $or: [
+                { user1_id: Math.min(uIdNum, fId), user2_id: Math.max(uIdNum, fId) }
+            ]
+        });
         
-        const [result] = await pool.query(
-            `DELETE FROM friendships 
-             WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
-            [Math.min(userId, friendId), Math.max(userId, friendId),
-             Math.min(userId, friendId), Math.max(userId, friendId)]
-        );
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Friendship not found' });
-        }
-        
+        if (result.deletedCount === 0) return res.status(404).json({ error: 'Friendship not found' });
         res.json({ success: true, message: 'Friend removed' });
     } catch (error) {
         console.error('Error removing friend:', error);
@@ -279,94 +209,63 @@ router.delete('/:friendId', async (req, res) => {
 // =================================
 // FRIEND ANALYTICS
 // =================================
-
-// Get friend's analytics/dashboard
 router.get('/:friendId/analytics', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const friendId = parseInt(req.params.friendId);
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+        const friendId = Number(req.params.friendId);
         
-        // Verify they are friends
-        const [friendship] = await pool.query(
-            `SELECT id FROM friendships 
-             WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)`,
-            [Math.min(userId, friendId), Math.max(userId, friendId),
-             Math.min(userId, friendId), Math.max(userId, friendId)]
-        );
+        const friendship = await Friendship.findOne({
+            user1_id: Math.min(uIdNum, friendId),
+            user2_id: Math.max(uIdNum, friendId)
+        });
         
-        if (friendship.length === 0) {
-            return res.status(403).json({ error: 'Not friends with this user' });
-        }
+        if (!friendship) return res.status(403).json({ error: 'Not friends with this user' });
         
-        // Get friend info
-        const [friendInfo] = await pool.query(
-            'SELECT name, current_streak, longest_streak FROM users WHERE id = ?',
-            [friendId]
-        );
+        const friendInfo = await User.findOne({ id: friendId }).lean();
         
-        // Get overall stats
-        const [overallStats] = await pool.query(
-            `SELECT 
-                COUNT(*) as total_tests,
-                AVG(percentage) as avg_score,
-                MAX(percentage) as best_score
-             FROM test_results WHERE user_id = ?`,
-            [friendId]
-        );
+        const overallStats = await TestResult.aggregate([
+            { $match: { user_id: friendId } },
+            { $group: { _id: null, total_tests: { $sum: 1 }, avg_score: { $avg: "$percentage"}, best_score: { $max: "$percentage"} } }
+        ]);
+
+        const subjectStats = await TestResult.aggregate([
+            { $match: { user_id: friendId, section: { $ne: null } } },
+            { $group: { _id: "$section", test_count: { $sum: 1 }, avg_score: { $avg: "$percentage"}, best_score: { $max: "$percentage"} } }
+        ]);
+
+        const myFriendships = await Friendship.find({ $or: [{ user1_id: uIdNum }, { user2_id: uIdNum }] }).lean();
+        const allFriendIds = myFriendships.map(f => f.user1_id === uIdNum ? f.user2_id : f.user1_id);
+        allFriendIds.push(uIdNum);
+
+        const rankings = await TestResult.aggregate([
+            { $match: { user_id: { $in: allFriendIds } } },
+            { $group: { _id: "$user_id", avg_score: { $avg: "$percentage" } } },
+            { $sort: { avg_score: -1 } }
+        ]);
         
-        // Get subject performance
-        const [subjectStats] = await pool.query(
-            `SELECT 
-                section,
-                COUNT(*) as test_count,
-                AVG(percentage) as avg_score,
-                MAX(percentage) as best_score
-             FROM test_results
-             WHERE user_id = ? AND section IS NOT NULL
-             GROUP BY section`,
-            [friendId]
-        );
-        
-        // Get friend's rank (among your friends)
-        const [friendsList] = await pool.query(
-            `SELECT CASE WHEN f.user1_id = ? THEN f.user2_id ELSE f.user1_id END as friend_id
-             FROM friendships f WHERE f.user1_id = ? OR f.user2_id = ?`,
-            [userId, userId, userId]
-        );
-        
-        const allFriendIds = friendsList.map(f => f.friend_id);
-        allFriendIds.push(userId);
-        
-        const [rankings] = await pool.query(
-            `SELECT u.id, AVG(t.percentage) as avg_score
-             FROM users u LEFT JOIN test_results t ON u.id = t.user_id
-             WHERE u.id IN (${allFriendIds.map(() => '?').join(',')})
-             GROUP BY u.id ORDER BY avg_score DESC`,
-            allFriendIds
-        );
-        
-        const friendRank = rankings.findIndex(r => r.id === friendId) + 1;
+        const friendRank = rankings.findIndex(r => r._id === friendId) + 1;
         
         res.json({
             friend: {
-                name: friendInfo[0].name,
-                current_streak: friendInfo[0].current_streak,
-                longest_streak: friendInfo[0].longest_streak
+                name: friendInfo.name,
+                current_streak: friendInfo.current_streak,
+                longest_streak: friendInfo.longest_streak
             },
             overall: {
-                total_tests: overallStats[0].total_tests,
-                avg_score: parseFloat(overallStats[0].avg_score || 0).toFixed(1),
-                best_score: parseFloat(overallStats[0].best_score || 0).toFixed(1)
+                total_tests: overallStats.length > 0 ? overallStats[0].total_tests : 0,
+                avg_score: overallStats.length > 0 ? (overallStats[0].avg_score).toFixed(1) : "0.0",
+                best_score: overallStats.length > 0 ? (overallStats[0].best_score).toFixed(1) : "0.0"
             },
             subjects: subjectStats.map(s => ({
-                section: s.section,
+                section: s._id,
                 test_count: s.test_count,
-                avg_score: parseFloat(s.avg_score).toFixed(1),
-                best_score: parseFloat(s.best_score).toFixed(1)
+                avg_score: (s.avg_score).toFixed(1),
+                best_score: (s.best_score).toFixed(1)
             })),
             rank: {
-                position: friendRank,
-                total_friends: rankings.length
+                position: friendRank === 0 ? allFriendIds.length : friendRank,
+                total_friends: allFriendIds.length
             }
         });
     } catch (error) {

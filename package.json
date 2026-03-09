@@ -17,6 +17,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.2.4",
     "mysql2": "^3.11.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

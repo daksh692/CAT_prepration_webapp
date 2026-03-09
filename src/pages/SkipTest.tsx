@@ -91,7 +91,7 @@ export default function SkipTest() {
         const fetchChapter = async () => {
             if (!chapterId) return;
             try {
-                const data = await api.getChapterById(Number(chapterId));
+                const data = await api.getChapterById(chapterId);
                 setChapter(data);
             } catch (error) {
                 console.error('Error fetching chapter:', error);
@@ -129,6 +129,8 @@ export default function SkipTest() {
     };
 
     const handleSubmit = async () => {
+        if (!chapterId) return;
+
         // Calculate score and count correct/incorrect/unattempted
         let rawScore = 0;
         let correctMCQ = 0;
@@ -167,7 +169,7 @@ export default function SkipTest() {
         // Record test result automatically
         try {
             await api.recordWebsiteTest({
-                chapter_id: Number(chapterId),
+                chapter_id: chapterId,
                 correct_mcq: correctMCQ,
                 incorrect_mcq: incorrectMCQ,
                 unattempted_mcq: unattemptedMCQ
@@ -179,7 +181,7 @@ export default function SkipTest() {
         // Update chapter status if passed
         if (percentage >= 80) {
             try {
-                await api.updateChapter(Number(chapterId), {
+                await api.updateChapter(chapterId, {
                     skipped: true,
                     skip_test_score: percentage,
                     completed_at: Date.now(),

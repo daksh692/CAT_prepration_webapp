@@ -12,11 +12,12 @@ if (process.env.ONLINE_DB_HOST) {
 }
 
 const createApp = require('./app');
-const { onlinePool } = require('./config/database');
+const { connectDB } = require('./config/database');
 
 (async () => {
   try {
-    const { start } = createApp(onlinePool);
+    await connectDB();
+    const { start } = createApp();
     start();
   } catch (err) {
     console.error('Failed to start online server:', err);

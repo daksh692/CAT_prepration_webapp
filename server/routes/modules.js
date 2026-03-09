@@ -1,20 +1,30 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config/database');
+const { Module, Chapter } = require('../models');
+const mongoose = require('mongoose');
+
+const getQuery = (id) => mongoose.Types.ObjectId.isValid(id) ? { $or: [{ _id: id }, { id: isNaN(Number(id)) ? -1 : Number(id) }] } : { id: Number(id) };
 
 // GET all modules
 router.get('/', async (req, res) => {
     try {
-        const [modules] = await pool.query(`
-            SELECT 
-                m.*,
-                COUNT(c.id) as chapterCount
-            FROM modules m
-            LEFT JOIN chapters c ON m.id = c.module_id
-            GROUP BY m.id
-            ORDER BY m.\`order\`
-        `);
-        res.json(modules);
+        const modules = await Module.find({}).sort({ order: 1 }).lean();
+        const chapters = await Chapter.find({}).lean();
+        
+        // Count chapters for each module
+        const chapterCountMap = {};
+        for (const ch of chapters) {
+            const mId = ch.module_id.toString();
+            chapterCountMap[mId] = (chapterCountMap[mId] || 0) + 1;
+        }
+
+        const result = modules.map(m => ({
+            ...m,
+            id: m.id || m._id,
+            chapterCount: chapterCountMap[(m.id || m._id).toString()] || 0
+        }));
+
+        res.json(result);
     } catch (error) {
         console.error('Error fetching modules:', error);
         res.status(500).json({ error: 'Failed to fetch modules' });
@@ -25,11 +35,8 @@ router.get('/', async (req, res) => {
 router.get('/section/:section', async (req, res) => {
     try {
         const { section } = req.params;
-        const [modules] = await pool.query(
-            'SELECT * FROM modules WHERE section = ? ORDER BY `order`',
-            [section]
-        );
-        res.json(modules);
+        const modules = await Module.find({ section }).sort({ order: 1 }).lean();
+        res.json(modules.map(m => ({ ...m, id: m.id || m._id })));
     } catch (error) {
         console.error('Error fetching modules by section:', error);
         res.status(500).json({ error: 'Failed to fetch modules' });
@@ -39,17 +46,15 @@ router.get('/section/:section', async (req, res) => {
 // GET single module by ID
 router.get('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const [modules] = await pool.query(
-            'SELECT * FROM modules WHERE id = ?',
-            [id]
-        );
+        const id = req.params.id;
+        const query = getQuery(id);
+        const moduleDoc = await Module.findOne(query).lean();
         
-        if (modules.length === 0) {
+        if (!moduleDoc) {
             return res.status(404).json({ error: 'Module not found' });
         }
         
-        res.json(modules[0]);
+        res.json({ ...moduleDoc, id: moduleDoc.id || moduleDoc._id });
     } catch (error) {
         console.error('Error fetching module:', error);
         res.status(500).json({ error: 'Failed to fetch module' });
@@ -62,12 +67,13 @@ router.post('/', async (req, res) => {
         const { name, section, phase, priority, estimated_hours, order } = req.body;
         const now = Date.now();
         
-        const [result] = await pool.query(
-            'INSERT INTO modules (name, section, phase, priority, estimated_hours, `order`, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [name, section, phase, priority, estimated_hours, order, now, now]
-        );
+        const newModule = new Module({
+            name, section, phase, priority, estimated_hours, order, 
+            created_at: now, updated_at: now
+        });
+        await newModule.save();
         
-        res.status(201).json({ id: result.insertId, message: 'Module created successfully' });
+        res.status(201).json({ id: newModule._id, message: 'Module created successfully' });
     } catch (error) {
         console.error('Error creating module:', error);
         res.status(500).json({ error: 'Failed to create module' });
@@ -77,14 +83,14 @@ router.post('/', async (req, res) => {
 // PUT update module
 router.put('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id;
         const { name, section, phase, priority, estimated_hours, order } = req.body;
         const now = Date.now();
         
-        await pool.query(
-            'UPDATE modules SET name = ?, section = ?, phase = ?, priority = ?, estimated_hours = ?, `order` = ?, updated_at = ? WHERE id = ?',
-            [name, section, phase, priority, estimated_hours, order, now, id]
-        );
+        const query = getQuery(id);
+        await Module.findOneAndUpdate(query, {
+            name, section, phase, priority, estimated_hours, order, updated_at: now
+        });
         
         res.json({ message: 'Module updated successfully' });
     } catch (error) {
@@ -96,8 +102,9 @@ router.put('/:id', async (req, res) => {
 // DELETE module
 router.delete('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        await pool.query('DELETE FROM modules WHERE id = ?', [id]);
+        const id = req.params.id;
+        const query = getQuery(id);
+        await Module.findOneAndDelete(query);
         res.json({ message: 'Module deleted successfully' });
     } catch (error) {
         console.error('Error deleting module:', error);

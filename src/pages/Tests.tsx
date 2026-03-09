@@ -211,13 +211,13 @@ export default function Tests() {
     // Prepare chart data
     const trendChartData = trends.map(t => ({
         date: new Date(t.test_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        score: parseFloat(t.avg_percentage).toFixed(1),
+        score: Number(parseFloat(t.avg_percentage)).toFixed(1),
         type: t.test_type
     }));
 
     const subjectChartData = subjects.map(s => ({
         subject: s.section,
-        score: parseFloat(s.avg_percentage).toFixed(1),
+        score: Number(parseFloat(s.avg_percentage)).toFixed(1),
         tests: s.test_count
     }));
 
@@ -333,7 +333,7 @@ export default function Tests() {
                                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border border-orange-200">
                                     <div className="text-orange-600 text-sm font-semibold mb-2">Avg Score</div>
                                     <div className="text-3xl font-bold text-orange-700">
-                                        {summary?.average_percentage ? `${summary.average_percentage.toFixed(1)}%` : '0%'}
+                                        {summary?.average_percentage ? `${Number(summary.average_percentage).toFixed(1)}%` : '0%'}
                                     </div>
                                 </div>
                             </div>
@@ -357,7 +357,7 @@ export default function Tests() {
                                     <div className="grid md:grid-cols-2 gap-8">
                                         <div className="text-center">
                                             <div className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-600 to-orange-600">
-                                                {catPrediction.predicted_percentile.toFixed(1)}
+                                                {Number(catPrediction.predicted_percentile).toFixed(1)}
                                             </div>
                                             <div className="text-2xl font-bold text-gray-700 mt-2">Predicted Percentile</div>
                                             <div className="mt-4 text-sm text-gray-600">
@@ -440,7 +440,7 @@ export default function Tests() {
                                                         <span className="text-red-800">
                                                             {ch.chapter_name} <span className="text-red-600">({ch.section})</span>
                                                         </span>
-                                                        <span className="font-semibold text-red-700">{ch.avg_percentage.toFixed(1)}%</span>
+                                                        <span className="font-semibold text-red-700">{Number(ch.avg_percentage).toFixed(1)}%</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -463,7 +463,7 @@ export default function Tests() {
                                                     </div>
                                                     <div className="flex items-center gap-4">
                                                         <span className="text-sm text-gray-600">{module.total_tests} tests</span>
-                                                        <span className="text-lg font-bold text-indigo-600">{module.avg_percentage.toFixed(1)}%</span>
+                                                        <span className="text-lg font-bold text-indigo-600">{Number(module.avg_percentage).toFixed(1)}%</span>
                                                     </div>
                                                 </summary>
 
@@ -482,7 +482,7 @@ export default function Tests() {
                                                                         chapter.avg_percentage >= 40 ? 'text-orange-600' :
                                                                             'text-red-600'
                                                                     }`}>
-                                                                    {chapter.avg_percentage.toFixed(1)}%
+                                                                    {Number(chapter.avg_percentage).toFixed(1)}%
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -550,7 +550,7 @@ export default function Tests() {
                                                 <span className="text-gray-600">Total Marks:</span>
                                                 <span className="font-semibold text-blue-600">
                                                     {results.filter(r => r.test_type === 'website')
-                                                        .reduce((sum, r) => sum + r.total_marks, 0).toFixed(1)}
+                                                        .reduce((sum, r) => sum + Number(r.total_marks), 0).toFixed(1)}
                                                 </span>
                                             </div>
                                         </div>
@@ -574,7 +574,7 @@ export default function Tests() {
                                                 <span className="text-gray-600">Total Marks:</span>
                                                 <span className="font-semibold text-purple-600">
                                                     {results.filter(r => r.test_type === 'external')
-                                                        .reduce((sum, r) => sum + r.total_marks, 0).toFixed(1)}
+                                                        .reduce((sum, r) => sum + Number(r.total_marks), 0).toFixed(1)}
                                                 </span>
                                             </div>
                                         </div>
@@ -612,7 +612,7 @@ export default function Tests() {
                                             <div key={area.section} className="bg-red-50 border border-red-200 rounded-lg p-4">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <h3 className="font-bold text-red-900">{area.section}</h3>
-                                                    <span className="text-sm text-red-700">{area.avg_percentage.toFixed(1)}%</span>
+                                                    <span className="text-sm text-red-700">{Number(area.avg_percentage).toFixed(1)}%</span>
                                                 </div>
                                                 <p className="text-sm text-red-800">{area.recommendation}</p>
                                             </div>
@@ -629,7 +629,7 @@ export default function Tests() {
                                         {weakAreas.strong_areas.map((area: any) => (
                                             <div key={area.section} className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
                                                 <h3 className="font-bold text-green-900">{area.section}</h3>
-                                                <p className="text-2xl font-bold text-green-600 mt-2">{area.avg_percentage.toFixed(1)}%</p>
+                                                <p className="text-2xl font-bold text-green-600 mt-2">{Number(area.avg_percentage).toFixed(1)}%</p>
                                                 <p className="text-xs text-green-700 mt-1">{area.test_count} tests</p>
                                             </div>
                                         ))}
@@ -783,7 +783,7 @@ export default function Tests() {
                             <div className="grid md:grid-cols-3 gap-4 text-center">
                                 <div>
                                     <div className="text-sm text-gray-600 mb-1">Total Marks</div>
-                                    <div className="text-3xl font-bold text-green-600">{marks.totalMarks.toFixed(1)}</div>
+                                    <div className="text-3xl font-bold text-green-600">{Number(marks.totalMarks).toFixed(1)}</div>
                                 </div>
                                 <div>
                                     <div className="text-sm text-gray-600 mb-1">Max Marks</div>
@@ -791,7 +791,7 @@ export default function Tests() {
                                 </div>
                                 <div>
                                     <div className="text-sm text-gray-600 mb-1">Percentage</div>
-                                    <div className="text-3xl font-bold text-blue-600">{marks.percentage.toFixed(1)}%</div>
+                                    <div className="text-3xl font-bold text-blue-600">{Number(marks.percentage).toFixed(1)}%</div>
                                 </div>
                             </div>
                         </div>
@@ -904,10 +904,10 @@ export default function Tests() {
                                                     Questions: <span className="font-semibold">{result.total_questions}</span>
                                                 </span>
                                                 <span className="text-gray-600">
-                                                    Marks: <span className="font-semibold text-green-600">{result.total_marks.toFixed(1)}</span>
+                                                    Marks: <span className="font-semibold text-green-600">{Number(result.total_marks).toFixed(1)}</span>
                                                 </span>
                                                 <span className="text-gray-600">
-                                                    Score: <span className="font-semibold text-blue-600">{result.percentage.toFixed(1)}%</span>
+                                                    Score: <span className="font-semibold text-blue-600">{Number(result.percentage).toFixed(1)}%</span>
                                                 </span>
                                             </div>
                                         </div>

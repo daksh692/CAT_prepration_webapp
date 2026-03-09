@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config/database');
+const { TestResult, Chapter } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
+const axios = require('axios');
 
 // Apply authentication to all test routes
 router.use(authenticateToken);
@@ -37,41 +38,58 @@ function calculateCATMarks(data) {
 // Get all test results for logged-in user
 router.get('/results', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
         const { days = 30, test_type } = req.query;
         
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - parseInt(days));
-        const startDateStr = startDate.toISOString().split('T')[0];
         
-        let query = `
-            SELECT t.*, c.name as chapter_name, m.name as module_name, m.section
-            FROM test_results t
-            LEFT JOIN chapters c ON t.chapter_id = c.id
-            LEFT JOIN modules m ON c.module_id = m.id
-            WHERE t.user_id = ? AND t.test_date >= ?
-        `;
-        const params = [userId, startDateStr];
-        
+        const matchStage = { user_id: uIdNum, test_date: { $gte: startDate } };
         if (test_type) {
-            query += ' AND t.test_type = ?';
-            params.push(test_type);
+            matchStage.test_type = test_type;
         }
         
-        query += ' ORDER BY t.test_date DESC, t.created_at DESC';
+        const rawResults = await TestResult.aggregate([
+            { $match: matchStage },
+            { $sort: { test_date: -1, created_at: -1 } },
+            { $lookup: {
+                from: 'chapters',
+                let: { ch_id: "$chapter_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$ch_id"] }, { $eq: ["$_id", "$$ch_id"] } ] } } }
+                ],
+                as: 'chapter'
+            }},
+            { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+            { $lookup: {
+                from: 'modules',
+                let: { m_id: "$chapter.module_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$m_id"] }, { $eq: ["$_id", "$$m_id"] } ] } } }
+                ],
+                as: 'module'
+            }},
+            { $unwind: { path: "$module", preserveNullAndEmptyArrays: true } }
+        ]);
+
+        const results = rawResults.map(r => ({
+            ...r,
+            chapter_name: r.chapter ? r.chapter.name : null,
+            module_name: r.module ? r.module.name : null,
+            section: r.module ? r.module.section : (r.section || null)
+        }));
         
-        const [results] = await pool.query(query, params);
-        
-        // Calculate summary statistics
         const summary = {
             total_tests: results.length,
             website_tests: results.filter(r => r.test_type === 'website').length,
             external_tests: results.filter(r => r.test_type === 'external').length,
             total_questions: results.reduce((sum, r) => sum + r.total_questions, 0),
             average_percentage: results.length > 0 
-                ? results.reduce((sum, r) => sum + parseFloat(r.percentage), 0) / results.length 
+                ? results.reduce((sum, r) => sum + r.percentage, 0) / results.length 
                 : 0,
-            total_marks_earned: results.reduce((sum, r) => sum + parseFloat(r.total_marks), 0)
+            total_marks_earned: results.reduce((sum, r) => sum + r.total_marks, 0)
         };
         
         res.json({ results, summary });
@@ -84,7 +102,9 @@ router.get('/results', async (req, res) => {
 // Record website test result
 router.post('/results/website', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
         const { chapter_id, correct_mcq, incorrect_mcq, unattempted_mcq } = req.body;
         
         const totalQuestions = correct_mcq + incorrect_mcq + unattempted_mcq;
@@ -94,47 +114,51 @@ router.post('/results/website', async (req, res) => {
             incorrect_mcq 
         });
         
-        // Get section from chapter if chapter_id provided
         let section = null;
         if (chapter_id) {
-            const [chapterData] = await pool.query(
-                `SELECT m.section FROM chapters c 
-                 JOIN modules m ON c.module_id = m.id 
-                 WHERE c.id = ?`,
-                [chapter_id]
-            );
-            section = chapterData[0]?.section || null;
+            const chId = isNaN(Number(chapter_id)) ? chapter_id : Number(chapter_id);
+            const ch = await Chapter.aggregate([
+                { $match: { $or: [{ id: chId }, { _id: String(chId) }] } },
+                { $lookup: {
+                    from: 'modules',
+                    let: { m_id: "$module_id" },
+                    pipeline: [
+                        { $match: { $expr: { $or: [ { $eq: ["$id", "$$m_id"] }, { $eq: ["$_id", "$$m_id"] } ] } } }
+                    ],
+                    as: 'module'
+                }}
+            ]);
+            if (ch.length && ch[0].module && ch[0].module.length) {
+                section = ch[0].module[0].section;
+            }
         }
         
-        const today = new Date().toISOString().split('T')[0];
-        const now = Date.now();
+        const newResult = new TestResult({
+            user_id: uIdNum,
+            test_date: new Date(),
+            test_type: 'website',
+            chapter_id: isNaN(Number(chapter_id)) ? null : Number(chapter_id),
+            section,
+            total_questions: totalQuestions,
+            correct_mcq,
+            incorrect_mcq,
+            unattempted_mcq,
+            total_marks: marks.total_marks,
+            max_marks: marks.max_marks,
+            percentage: marks.percentage,
+            created_at: Date.now()
+        });
+        await newResult.save();
         
-        await pool.query(
-            `INSERT INTO test_results 
-             (user_id, test_date, test_type, chapter_id, section, total_questions, 
-              correct_mcq, incorrect_mcq, unattempted_mcq, 
-              total_marks, max_marks, percentage, created_at)
-             VALUES (?, ?, 'website', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userId, today, chapter_id, section, totalQuestions, 
-             correct_mcq, incorrect_mcq, unattempted_mcq,
-             marks.total_marks, marks.max_marks, marks.percentage, now]
-        );
-        
-        // Check for achievements
-        const axios = require('axios');
+        // Trigger generic check achievements endpoint, non critical
         try {
             const token = req.headers.authorization;
-            await axios.post('http://localhost:5000/api/analytics/check-achievements', {}, {
+            await axios.post(`http://localhost:${process.env.PORT || 5000}/api/analytics/check-achievements`, {}, {
                 headers: { 'Authorization': token }
             });
-        } catch (err) {
-            console.log('Achievement check failed (non-critical):', err.message);
-        }
+        } catch (err) { }
         
-        res.json({ 
-            message: 'Test result recorded successfully',
-            marks: marks
-        });
+        res.json({ message: 'Test result recorded successfully', marks: marks });
     } catch (error) {
         console.error('Error recording website test:', error);
         res.status(500).json({ error: 'Failed to record test result' });
@@ -144,57 +168,42 @@ router.post('/results/website', async (req, res) => {
 // Record external test result
 router.post('/results/external', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const { 
-            chapter_id, 
-            section,  // Now accepting section from frontend
-            correct_mcq, 
-            incorrect_mcq, 
-            correct_fitb = 0, 
-            incorrect_fitb = 0,
-            is_checked = true,
-            notes 
-        } = req.body;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
+        const { chapter_id, section, correct_mcq, incorrect_mcq, correct_fitb = 0, incorrect_fitb = 0, is_checked = true, notes } = req.body;
         
         const totalQuestions = correct_mcq + incorrect_mcq + correct_fitb + incorrect_fitb;
-        const marks = calculateCATMarks({ 
-            test_type: 'external', 
-            correct_mcq, 
-            incorrect_mcq,
+        const marks = calculateCATMarks({ test_type: 'external', correct_mcq, incorrect_mcq, correct_fitb, incorrect_fitb });
+        
+        const newResult = new TestResult({
+            user_id: uIdNum,
+            test_date: new Date(),
+            test_type: 'external',
+            chapter_id: isNaN(Number(chapter_id)) ? null : Number(chapter_id),
+            section,
+            total_questions: totalQuestions,
+            correct_mcq_external: correct_mcq,
+            incorrect_mcq_external: incorrect_mcq,
             correct_fitb,
-            incorrect_fitb
+            incorrect_fitb,
+            total_marks: marks.total_marks,
+            max_marks: marks.max_marks,
+            percentage: marks.percentage,
+            is_checked,
+            notes,
+            created_at: Date.now()
         });
+        await newResult.save();
         
-        const today = new Date().toISOString().split('T')[0];
-        const now = Date.now();
-        
-        await pool.query(
-            `INSERT INTO test_results 
-             (user_id, test_date, test_type, chapter_id, section, total_questions,
-              correct_mcq_external, incorrect_mcq_external, 
-              correct_fitb, incorrect_fitb,
-              total_marks, max_marks, percentage, is_checked, notes, created_at)
-             VALUES (?, ?, 'external', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userId, today, chapter_id, section, totalQuestions,
-             correct_mcq, incorrect_mcq, correct_fitb, incorrect_fitb,
-             marks.total_marks, marks.max_marks, marks.percentage, is_checked, notes, now]
-        );
-        
-        // Check for achievements
-        const axios = require('axios');
         try {
             const token = req.headers.authorization;
-            await axios.post('http://localhost:5000/api/analytics/check-achievements', {}, {
+            await axios.post(`http://localhost:${process.env.PORT || 5000}/api/analytics/check-achievements`, {}, {
                 headers: { 'Authorization': token }
             });
-        } catch (err) {
-            console.log('Achievement check failed (non-critical):', err.message);
-        }
+        } catch (err) { }
         
-        res.json({ 
-            message: 'External test result recorded successfully',
-            marks: marks
-        });
+        res.json({ message: 'External test result recorded successfully', marks: marks });
     } catch (error) {
         console.error('Error recording external test:', error);
         res.status(500).json({ error: 'Failed to record test result' });
@@ -204,61 +213,88 @@ router.post('/results/external', async (req, res) => {
 // Get analytics summary
 router.get('/analytics', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
         const days = parseInt(req.query.days) || 30;
         
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
-        const startDateStr = startDate.toISOString().split('T')[0];
+        startDate.setHours(0,0,0,0);
         
-        // Get daily test data
-        const [dailyData] = await pool.query(
-            `SELECT 
-                test_date,
-                test_type,
-                COUNT(*) as test_count,
-                SUM(total_questions) as questions_attempted,
-                AVG(percentage) as avg_percentage,
-                SUM(total_marks) as total_marks
-             FROM test_results
-             WHERE user_id = ? AND test_date >= ?
-             GROUP BY test_date, test_type
-             ORDER BY test_date ASC`,
-            [userId, startDateStr]
-        );
-        
-        // Get subject-wise performance
-        const [subjectData] = await pool.query(
-            `SELECT 
-                m.section,
-                COUNT(*) as test_count,
-                SUM(t.total_questions) as questions_attempted,
-                AVG(t.percentage) as avg_percentage
-             FROM test_results t
-             LEFT JOIN chapters c ON t.chapter_id = c.id
-             LEFT JOIN modules m ON c.module_id = m.id
-             WHERE t.user_id = ? AND t.test_date >= ?
-             GROUP BY m.section`,
-            [userId, startDateStr]
-        );
-        
-        // Get overall stats
-        const [overallStats] = await pool.query(
-            `SELECT 
-                COUNT(*) as total_tests,
-                SUM(total_questions) as total_questions,
-                AVG(percentage) as avg_percentage,
-                AVG(CASE WHEN test_type = 'website' THEN percentage END) as website_avg,
-                AVG(CASE WHEN test_type = 'external' THEN percentage END) as external_avg
-             FROM test_results
-             WHERE user_id = ? AND test_date >= ?`,
-            [userId, startDateStr]
-        );
+        // daily data
+        const dailyData = await TestResult.aggregate([
+            { $match: { user_id: uIdNum, test_date: { $gte: startDate } } },
+            { $group: {
+                _id: { date: { $dateToString: { format: "%Y-%m-%d", date: "$test_date" } }, test_type: "$test_type" },
+                test_count: { $sum: 1 },
+                questions_attempted: { $sum: "$total_questions" },
+                avg_percentage: { $avg: "$percentage" },
+                total_marks: { $sum: "$total_marks" }
+            }},
+            { $sort: { "_id.date": 1 } }
+        ]);
+        const formattedDailyData = dailyData.map(d => ({
+            test_date: d._id.date,
+            test_type: d._id.test_type,
+            test_count: d.test_count,
+            questions_attempted: d.questions_attempted,
+            avg_percentage: d.avg_percentage,
+            total_marks: d.total_marks
+        }));
+
+        // subject data
+        const subjectDataAggregate = await TestResult.aggregate([
+            { $match: { user_id: uIdNum, test_date: { $gte: startDate } } },
+            { $lookup: {
+                from: 'chapters',
+                let: { ch_id: "$chapter_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$ch_id"] }, { $eq: ["$_id", "$$ch_id"] } ] } } }
+                ],
+                as: 'chapter'
+            }},
+            { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+            { $lookup: {
+                from: 'modules',
+                let: { m_id: "$chapter.module_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$m_id"] }, { $eq: ["$_id", "$$m_id"] } ] } } }
+                ],
+                as: 'module'
+            }},
+            { $unwind: { path: "$module", preserveNullAndEmptyArrays: true } },
+            { $group: {
+                _id: { $cond: [ { $ifNull: ["$module.section", false] }, "$module.section", "$section" ] },
+                test_count: { $sum: 1 },
+                questions_attempted: { $sum: "$total_questions" },
+                avg_percentage: { $avg: "$percentage" }
+            }}
+        ]);
+        const subjectData = subjectDataAggregate.map(d => ({
+            section: d._id,
+            test_count: d.test_count,
+            questions_attempted: d.questions_attempted,
+            avg_percentage: d.avg_percentage
+        }));
+
+        // overall stats
+        const overallStats = await TestResult.aggregate([
+            { $match: { user_id: uIdNum, test_date: { $gte: startDate } } },
+            { $group: {
+                _id: null,
+                total_tests: { $sum: 1 },
+                total_questions: { $sum: "$total_questions" },
+                avg_percentage: { $avg: "$percentage" },
+                website_avg: { $avg: { $cond: [ { $eq: ["$test_type", "website"] }, "$percentage", null ] } },
+                external_avg: { $avg: { $cond: [ { $eq: ["$test_type", "external"] }, "$percentage", null ] } }
+            }}
+        ]);
         
         res.json({
-            daily_data: dailyData,
+            daily_data: formattedDailyData,
             subject_data: subjectData,
-            overall: overallStats[0]
+            overall: overallStats.length > 0 ? overallStats[0] : { total_tests: 0, total_questions: 0, avg_percentage: 0 }
         });
     } catch (error) {
         console.error('Error fetching test analytics:', error);
@@ -269,14 +305,10 @@ router.get('/analytics', async (req, res) => {
 // Delete test result
 router.delete('/results/:id', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const testId = req.params.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
         
-        await pool.query(
-            'DELETE FROM test_results WHERE id = ? AND user_id = ?',
-            [testId, userId]
-        );
-        
+        await TestResult.deleteOne({ _id: req.params.id, user_id: uIdNum });
         res.json({ message: 'Test result deleted successfully' });
     } catch (error) {
         console.error('Error deleting test result:', error);

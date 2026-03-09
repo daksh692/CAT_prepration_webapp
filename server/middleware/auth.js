@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/database');
+const { User } = require('../models');
 
 // Middleware to verify JWT token
 const authenticateToken = async (req, res, next) => {
@@ -15,14 +15,15 @@ const authenticateToken = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
         
         // Fetch user from database to ensure they still exist
-        const [users] = await pool.query('SELECT id, email, name, role FROM users WHERE id = ?', [decoded.id]);
+        // Note: decoded.id holds the string representation of the MongoDB ObjectId now
+        const user = await User.findById(decoded.id);
         
-        if (users.length === 0) {
+        if (!user) {
             return res.status(401).json({ error: 'User not found' });
         }
         
         // Attach user to request
-        req.user = users[0];
+        req.user = { id: user._id, email: user.email, name: user.name, role: user.role };
         next();
     } catch (error) {
         console.error('Auth error:', error);

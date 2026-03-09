@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config/database');
+const { Chapter, StudyMaterial, StudyPointer, StudyFormula, StudyExample, StudyPracticeProblem, StudySession, User } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 
 // Apply authentication to all study routes
@@ -10,20 +10,36 @@ router.use(authenticateToken);
 // STUDY SESSION ENDPOINTS
 // =================================
 
-
-// Get chapters that have study materials (videos, notes, etc.)
+// Get chapters that have study materials
 router.get('/chapters-with-materials', async (req, res) => {
     try {
-        const [chapters] = await pool.query(`
-            SELECT DISTINCT c.id, c.module_id, c.name 
-            FROM chapters c
-            WHERE EXISTS (SELECT 1 FROM study_materials sm WHERE sm.chapter_id = c.id)
-               OR EXISTS (SELECT 1 FROM study_pointers sp WHERE sp.chapter_id = c.id)
-               OR EXISTS (SELECT 1 FROM study_formulas sf WHERE sf.chapter_id = c.id)
-               OR EXISTS (SELECT 1 FROM study_examples se WHERE se.chapter_id = c.id)
-               OR EXISTS (SELECT 1 FROM study_practice_problems spp WHERE spp.chapter_id = c.id)
-        `);
-        res.json(chapters);
+        const materials = await StudyMaterial.distinct('chapter_id');
+        const pointers = await StudyPointer.distinct('chapter_id');
+        const formulas = await StudyFormula.distinct('chapter_id');
+        const examples = await StudyExample.distinct('chapter_id');
+        const practices = await StudyPracticeProblem.distinct('chapter_id');
+
+        const chapterIdsWithMaterials = new Set([
+            ...materials.map(id => id.toString()),
+            ...pointers.map(id => id.toString()),
+            ...formulas.map(id => id.toString()),
+            ...examples.map(id => id.toString()),
+            ...practices.map(id => id.toString())
+        ]);
+
+        const idsArray = Array.from(chapterIdsWithMaterials);
+        
+        const stringIds = idsArray.filter(id => isNaN(Number(id)));
+        const numIds = idsArray.filter(id => !isNaN(Number(id))).map(Number);
+        
+        const chapters = await Chapter.find({
+            $or: [
+                { _id: { $in: stringIds } },
+                { id: { $in: numIds } }
+            ]
+        }).select('id _id module_id name').lean();
+
+        res.json(chapters.map(c => ({ id: c.id || c._id, module_id: c.module_id, name: c.name })));
     } catch (error) {
         console.error('Error fetching chapters with materials:', error);
         res.status(500).json({ error: 'Failed to fetch chapters with materials' });
@@ -34,24 +50,25 @@ router.get('/chapters-with-materials', async (req, res) => {
 router.get('/chapter/:chapterId', async (req, res) => {
     try {
         const { chapterId } = req.params;
-        
-        // Fetch all types of study materials in parallel
-        const [materials, pointers, formulas, examples, practice, notes] = await Promise.all([
-            pool.query('SELECT * FROM study_materials WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
-            pool.query('SELECT * FROM study_pointers WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
-            pool.query('SELECT * FROM study_formulas WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
-            pool.query('SELECT * FROM study_examples WHERE chapter_id = ? ORDER BY `order`', [chapterId]),
-            pool.query('SELECT * FROM study_practice_problems WHERE chapter_id = ? ORDER BY id', [chapterId]),
-            pool.query('SELECT * FROM study_notes WHERE chapter_id = ? ORDER BY `order`', [chapterId])
+        const chId = isNaN(Number(chapterId)) ? chapterId : Number(chapterId);
+
+        const query = { chapter_id: chId };
+
+        const [materials, pointers, formulas, examples, practice] = await Promise.all([
+            StudyMaterial.find(query).lean(),
+            StudyPointer.find(query).sort({ order: 1 }).lean(),
+            StudyFormula.find(query).sort({ order: 1 }).lean(),
+            StudyExample.find(query).sort({ order: 1 }).lean(),
+            StudyPracticeProblem.find(query).sort({ id: 1 }).lean()
         ]);
         
         res.json({
-            materials: materials[0],
-            pointers: pointers[0],
-            formulas: formulas[0],
-            examples: examples[0],
-            practice: practice[0],
-            notes: notes[0]
+            materials: materials[0] || null,
+            pointers: pointers[0] || null,
+            formulas: formulas[0] || null,
+            examples: examples[0] || null,
+            practice: practice[0] || null,
+            notes: null // No study_notes model existed previously in index.js
         });
     } catch (error) {
         console.error('Error fetching study materials:', error);
@@ -59,35 +76,48 @@ router.get('/chapter/:chapterId', async (req, res) => {
     }
 });
 
-// Get session history (last N days) for logged-in user
+// Get session history
 router.get('/sessions/history', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
+
         const days = parseInt(req.query.days) || 7;
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
-        const startDateStr = startDate.toISOString().split('T')[0];
-        
-        const [sessions] = await pool.query(
-            `SELECT s.*, c.name as chapter_name, m.name as module_name, m.section
-             FROM study_sessions s
-             LEFT JOIN chapters c ON s.chapter_id = c.id
-             LEFT JOIN modules m ON c.module_id = m.id
-             WHERE s.user_id = ? AND s.date >= ?
-             ORDER BY s.date DESC, s.created_at DESC`,
-            [userId, startDateStr]
-        );
-        
-        // Group sessions by date
+
+        const sessions = await StudySession.aggregate([
+            { $match: { user_id: uIdNum, date: { $gte: startDate } } },
+            { $sort: { date: -1, created_at: -1 } },
+            { $lookup: {
+                from: 'chapters',
+                let: { ch_id: "$chapter_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$ch_id"] }, { $eq: ["$_id", "$$ch_id"] } ] } } }
+                ],
+                as: 'chapter'
+            }},
+            { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+            { $lookup: {
+                from: 'modules',
+                let: { m_id: "$chapter.module_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$m_id"] }, { $eq: ["$_id", "$$m_id"] } ] } } }
+                ],
+                as: 'module'
+            }},
+            { $unwind: { path: "$module", preserveNullAndEmptyArrays: true } }
+        ]);
+
         const sessionsByDay = {};
         let weekTotalMinutes = 0;
         let weekTotalQuestions = 0;
-        
+
         sessions.forEach(session => {
-            const date = session.date.toISOString().split('T')[0];
-            if (!sessionsByDay[date]) {
-                sessionsByDay[date] = {
-                    date,
+            const dateStr = session.date instanceof Date ? session.date.toISOString().split('T')[0] : session.date.toString().split('T')[0];
+            if (!sessionsByDay[dateStr]) {
+                sessionsByDay[dateStr] = {
+                    date: dateStr,
                     total_minutes: 0,
                     total_questions: 0,
                     session_count: 0,
@@ -95,15 +125,25 @@ router.get('/sessions/history', async (req, res) => {
                 };
             }
             
-            sessionsByDay[date].total_minutes += session.duration;
-            sessionsByDay[date].total_questions += session.questions_completed;
-            sessionsByDay[date].session_count++;
-            sessionsByDay[date].sessions.push(session);
+            sessionsByDay[dateStr].total_minutes += session.duration || 0;
+            sessionsByDay[dateStr].total_questions += session.questions_completed || 0;
+            sessionsByDay[dateStr].session_count++;
             
-            weekTotalMinutes += session.duration;
-            weekTotalQuestions += session.questions_completed;
+            const transformedSession = {
+                ...session,
+                chapter_name: session.chapter ? session.chapter.name : null,
+                module_name: session.module ? session.module.name : null,
+                section: session.module ? session.module.section : null
+            };
+            delete transformedSession.chapter;
+            delete transformedSession.module;
+
+            sessionsByDay[dateStr].sessions.push(transformedSession);
+            
+            weekTotalMinutes += session.duration || 0;
+            weekTotalQuestions += session.questions_completed || 0;
         });
-        
+
         res.json({
             sessions_by_day: Object.values(sessionsByDay),
             week_total_minutes: weekTotalMinutes,
@@ -116,23 +156,47 @@ router.get('/sessions/history', async (req, res) => {
     }
 });
 
-// Get today's detailed sessions for logged-in user
+// Get today's detailed sessions
 router.get('/sessions/today', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const today = new Date().toISOString().split('T')[0];
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
         
-        const [sessions] = await pool.query(
-            `SELECT s.*, c.name as chapter_name, m.name as module_name, m.section
-             FROM study_sessions s
-             LEFT JOIN chapters c ON s.chapter_id = c.id
-             LEFT JOIN modules m ON c.module_id = m.id
-             WHERE s.user_id = ? AND s.date = ?
-             ORDER BY s.created_at DESC`,
-            [userId, today]
-        );
+        const todayStr = new Date().toISOString().split('T')[0];
+        const startOfToday = new Date(todayStr);
+        const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
         
-        res.json({ sessions, count: sessions.length });
+        const sessions = await StudySession.aggregate([
+            { $match: { user_id: uIdNum, date: { $gte: startOfToday, $lt: endOfToday } } },
+            { $sort: { created_at: -1 } },
+            { $lookup: {
+                from: 'chapters',
+                let: { ch_id: "$chapter_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$ch_id"] }, { $eq: ["$_id", "$$ch_id"] } ] } } }
+                ],
+                as: 'chapter'
+            }},
+            { $unwind: { path: "$chapter", preserveNullAndEmptyArrays: true } },
+            { $lookup: {
+                from: 'modules',
+                let: { m_id: "$chapter.module_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$m_id"] }, { $eq: ["$_id", "$$m_id"] } ] } } }
+                ],
+                as: 'module'
+            }},
+            { $unwind: { path: "$module", preserveNullAndEmptyArrays: true } }
+        ]);
+
+        const formatted = sessions.map(session => ({
+            ...session,
+            chapter_name: session.chapter ? session.chapter.name : null,
+            module_name: session.module ? session.module.name : null,
+            section: session.module ? session.module.section : null
+        }));
+        
+        res.json({ sessions: formatted, count: formatted.length });
     } catch (error) {
         console.error('Error fetching today sessions:', error);
         res.status(500).json({ error: 'Failed to fetch today\'s sessions' });
@@ -142,31 +206,35 @@ router.get('/sessions/today', async (req, res) => {
 // Start new study session
 router.post('/sessions/start', async (req, res) => {
     try {
-        const { chapter_id, study_mode } = req.body; // study_mode: 'website' or 'external'
+        const { chapter_id, study_mode } = req.body;
+        if (!chapter_id) return res.status(400).json({ error: 'Chapter ID is required' });
         
-        if (!chapter_id) {
-            return res.status(400).json({ error: 'Chapter ID is required' });
-        }
+        const chId = isNaN(Number(chapter_id)) ? chapter_id : Number(chapter_id);
         
-        // Get chapter details
-        const [chapters] = await pool.query(
-            `SELECT c.*, m.name as module_name, m.section
-             FROM chapters c
-             JOIN modules m ON c.module_id = m.id
-             WHERE c.id = ?`,
-            [chapter_id]
-        );
+        const chapterArr = await Chapter.aggregate([
+            { $match: { $or: [{ id: chId }, { _id: String(chId) }] } },
+            { $lookup: {
+                from: 'modules',
+                let: { m_id: "$module_id" },
+                pipeline: [
+                    { $match: { $expr: { $or: [ { $eq: ["$id", "$$m_id"] }, { $eq: ["$_id", "$$m_id"] } ] } } }
+                ],
+                as: 'module'
+            }},
+            { $unwind: { path: "$module", preserveNullAndEmptyArrays: true } }
+        ]);
         
-        if (chapters.length === 0) {
-            return res.status(404).json({ error: 'Chapter not found' });
-        }
+        if (chapterArr.length === 0) return res.status(404).json({ error: 'Chapter not found' });
         
-        const chapter = chapters[0];
-        const sessionId = `temp_${Date.now()}`;
+        const chapterInfo = {
+            ...chapterArr[0],
+            module_name: chapterArr[0].module?.name,
+            section: chapterArr[0].module?.section
+        };
         
         res.json({
-            session_id: sessionId,
-            chapter,
+            session_id: `temp_${Date.now()}`,
+            chapter: chapterInfo,
             study_mode: study_mode || 'website',
             started_at: Date.now(),
             message: 'Session started successfully'
@@ -177,82 +245,66 @@ router.post('/sessions/start', async (req, res) => {
     }
 });
 
-// End study session and save to database for logged-in user
+// End study session and save
 router.post('/sessions/end', async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
         const { chapter_id, duration, questions_completed, study_mode } = req.body;
         
-        if (!duration || duration <= 0) {
-            return res.status(400).json({ error: 'Duration must be greater than 0' });
-        }
+        if (!duration || duration <= 0) return res.status(400).json({ error: 'Duration must be greater than 0' });
         
-        const today = new Date().toISOString().split('T')[0];
-        const now = Date.now();
+        const chId = isNaN(Number(chapter_id)) ? null : Number(chapter_id);
+        const todayStr = new Date().toISOString().split('T')[0];
         
-        // Insert session into database for this user
-        const [result] = await pool.query(
-            `INSERT INTO study_sessions 
-             (user_id, date, chapter_id, duration, questions_completed, created_at) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [userId, today, chapter_id || null, duration, questions_completed || 0, now]
-        );
-        
-        // Update streak for Phase 2C
-        
-        const [user] = await pool.query(
-            'SELECT last_study_date, current_streak, longest_streak FROM users WHERE id = ?',
-            [userId]
-        );
-        
-        if (user.length > 0) {
-            const lastDate = user[0].last_study_date;
-            let currentStreak = user[0].current_streak || 0;
-            let longestStreak = user[0].longest_streak || 0;
+        const session = new StudySession({
+            user_id: uIdNum,
+            date: new Date(),
+            chapter_id: chId,
+            duration: duration,
+            questions_completed: questions_completed || 0,
+            created_at: Date.now()
+        });
+        await session.save();
+
+        const user = await User.findOne({ id: uIdNum });
+        if (user) {
+            const lastDate = user.last_study_date;
+            let currentStreak = user.current_streak || 0;
+            let longestStreak = user.longest_streak || 0;
             
             if (!lastDate) {
-                // First study session
                 currentStreak = 1;
             } else {
                 const lastStudyDate = new Date(lastDate);
-                const todayDate = new Date(today);
+                const todayDate = new Date(todayStr);
                 const diffDays = Math.floor((todayDate - lastStudyDate) / (1000 * 60 * 60 * 24));
                 
-                if (diffDays === 0) {
-                    // Same day, no change
-                } else if (diffDays === 1) {
-                    // Consecutive day, increment
+                if (diffDays === 1) {
                     currentStreak += 1;
-                } else {
-                    // Missed days, reset
+                } else if (diffDays > 1) {
                     currentStreak = 1;
                 }
             }
             
-            // Update longest if current exceeds it
-            if (currentStreak > longestStreak) {
-                longestStreak = currentStreak;
-            }
+            if (currentStreak > longestStreak) longestStreak = currentStreak;
             
-            await pool.query(
-                'UPDATE users SET current_streak = ?, longest_streak = ?, last_study_date = ? WHERE id = ?',
-                [currentStreak, longestStreak, today, userId]
-            );
+            user.current_streak = currentStreak;
+            user.longest_streak = longestStreak;
+            user.last_study_date = todayStr;
+            await user.save();
             
             res.json({
                 message: 'Session saved successfully',
-                session_id: result.insertId,
+                session_id: session._id,
                 duration,
                 questions_completed: questions_completed || 0,
-                streak: {
-                    current: currentStreak,
-                    longest: longestStreak
-                }
+                streak: { current: currentStreak, longest: longestStreak }
             });
         } else {
             res.json({
                 message: 'Session saved successfully',
-                session_id: result.insertId,
+                session_id: session._id,
                 duration,
                 questions_completed: questions_completed || 0
             });
@@ -263,35 +315,44 @@ router.post('/sessions/end', async (req, res) => {
     }
 });
 
-// Get weekly analytics data for logged-in user
+// Get weekly analytics data
 router.get('/analytics/weekly', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const days = 7;
-        const dataPoints = [];
+        const userId = req.user.id || req.user._id;
+        const uIdNum = isNaN(Number(userId)) ? 1 : Number(userId);
         
-        // Get data for each of the last 7 days for this user
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 6);
+        startDate.setHours(0,0,0,0);
+        
+        const sessions = await StudySession.aggregate([
+            { $match: { user_id: uIdNum, date: { $gte: startDate } } },
+            { $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                total_minutes: { $sum: "$duration" },
+                total_questions: { $sum: "$questions_completed" },
+                session_count: { $sum: 1 }
+            }}
+        ]);
+        
+        const dataMap = sessions.reduce((acc, s) => { acc[s._id] = s; return acc; }, {});
+        const dataPoints = [];
+        const days = 7;
+        
         for (let i = days - 1; i >= 0; i--) {
             const date = new Date();
             date.setDate(date.getDate() - i);
             const dateStr = date.toISOString().split('T')[0];
             
-            const [result] = await pool.query(
-                `SELECT 
-                    COALESCE(SUM(duration), 0) as total_minutes,
-                    COALESCE(SUM(questions_completed), 0) as total_questions,
-                    COUNT(*) as session_count
-                 FROM study_sessions
-                 WHERE user_id = ? AND date = ?`,
-                [userId, dateStr]
-            );
+            const record = dataMap[dateStr] || {};
             
             dataPoints.push({
                 date: dateStr,
                 day_name: date.toLocaleDateString('en-US', { weekday: 'short' }),
-                total_minutes: result[0].total_minutes || 0,
-                total_questions: result[0].total_questions || 0,
-                session_count: result[0].session_count || 0
+                total_minutes: record.total_minutes || 0,
+                total_questions: record.total_questions || 0,
+                session_count: record.session_count || 0
             });
         }
         

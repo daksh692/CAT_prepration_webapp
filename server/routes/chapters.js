@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../config/database');
+const { Chapter } = require('../models');
+const mongoose = require('mongoose');
+
+const getQuery = (id) => mongoose.Types.ObjectId.isValid(id) ? { $or: [{ _id: id }, { id: isNaN(Number(id)) ? -1 : Number(id) }] } : { id: Number(id) };
 
 // GET all chapters
 router.get('/', async (req, res) => {
     try {
-        const [chapters] = await pool.query('SELECT * FROM chapters');
-        res.json(chapters);
+        const chapters = await Chapter.find({}).lean();
+        res.json(chapters.map(c => ({ ...c, id: c.id || c._id })));
     } catch (error) {
         console.error('Error fetching chapters:', error);
         res.status(500).json({ error: 'Failed to fetch chapters' });
@@ -16,12 +19,10 @@ router.get('/', async (req, res) => {
 // GET chapters by module ID
 router.get('/module/:moduleId', async (req, res) => {
     try {
-        const { moduleId } = req.params;
-        const [chapters] = await pool.query(
-            'SELECT * FROM chapters WHERE module_id = ? ORDER BY id',
-            [moduleId]
-        );
-        res.json(chapters);
+        const mId = req.params.moduleId;
+        const query = isNaN(Number(mId)) ? { module_id: mId } : { module_id: Number(mId) };
+        const chapters = await Chapter.find(query).sort({ _id: 1 }).lean();
+        res.json(chapters.map(c => ({ ...c, id: c.id || c._id })));
     } catch (error) {
         console.error('Error fetching chapters:', error);
         res.status(500).json({ error: 'Failed to fetch chapters' });
@@ -31,17 +32,15 @@ router.get('/module/:moduleId', async (req, res) => {
 // GET single chapter by ID
 router.get('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const [chapters] = await pool.query(
-            'SELECT * FROM chapters WHERE id = ?',
-            [id]
-        );
+        const id = req.params.id;
+        const query = getQuery(id);
+        const chapter = await Chapter.findOne(query).lean();
         
-        if (chapters.length === 0) {
+        if (!chapter) {
             return res.status(404).json({ error: 'Chapter not found' });
         }
         
-        res.json(chapters[0]);
+        res.json({ ...chapter, id: chapter.id || chapter._id });
     } catch (error) {
         console.error('Error fetching chapter:', error);
         res.status(500).json({ error: 'Failed to fetch chapter' });
@@ -51,17 +50,13 @@ router.get('/:id', async (req, res) => {
 // GET chapter by name
 router.get('/name/:name', async (req, res) => {
     try {
-        const { name } = req.params;
-        const [chapters] = await pool.query(
-            'SELECT * FROM chapters WHERE name = ?',
-            [name]
-        );
+        const chapter = await Chapter.findOne({ name: req.params.name }).lean();
         
-        if (chapters.length === 0) {
+        if (!chapter) {
             return res.status(404).json({ error: 'Chapter not found' });
         }
         
-        res.json(chapters[0]);
+        res.json({ ...chapter, id: chapter.id || chapter._id });
     } catch (error) {
         console.error('Error fetching chapter:', error);
         res.status(500).json({ error: 'Failed to fetch chapter' });
@@ -73,13 +68,21 @@ router.post('/', async (req, res) => {
     try {
         const { module_id, name, topics, estimated_hours, difficulty } = req.body;
         const now = Date.now();
+        const mId = isNaN(Number(module_id)) ? module_id : Number(module_id);
         
-        const [result] = await pool.query(
-            'INSERT INTO chapters (module_id, name, topics, estimated_hours, difficulty, completed, skipped, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [module_id, name, JSON.stringify(topics), estimated_hours, difficulty, false, false, now]
-        );
+        const newChapter = new Chapter({
+            module_id: mId,
+            name,
+            topics, // already array or parseable
+            estimated_hours,
+            difficulty,
+            completed: false,
+            skipped: false,
+            created_at: now
+        });
+        await newChapter.save();
         
-        res.status(201).json({ id: result.insertId, message: 'Chapter created successfully' });
+        res.status(201).json({ id: newChapter._id, message: 'Chapter created successfully' });
     } catch (error) {
         console.error('Error creating chapter:', error);
         res.status(500).json({ error: 'Failed to create chapter' });
@@ -89,40 +92,19 @@ router.post('/', async (req, res) => {
 // PUT update chapter
 router.put('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id;
         const { completed, skipped, skip_test_score, notes } = req.body;
         
-        let query = 'UPDATE chapters SET ';
-        const params = [];
+        const updateData = {};
+        if (completed !== undefined) updateData.completed = completed;
+        if (skipped !== undefined) updateData.skipped = skipped;
+        if (skip_test_score !== undefined) updateData.skip_test_score = skip_test_score;
+        if (notes !== undefined) updateData.notes = notes;
+        if (completed) updateData.completed_at = Date.now();
         
-        if (completed !== undefined) {
-            query += 'completed = ?, ';
-            params.push(completed);
-        }
-        if (skipped !== undefined) {
-            query += 'skipped = ?, ';
-            params.push(skipped);
-        }
-        if (skip_test_score !== undefined) {
-            query += 'skip_test_score = ?, ';
-            params.push(skip_test_score);
-        }
-        if (notes !== undefined) {
-            query += 'notes = ?, ';
-            params.push(notes);
-        }
+        const query = getQuery(id);
+        await Chapter.findOneAndUpdate(query, updateData);
         
-        if (completed) {
-            query += 'completed_at = ?, ';
-            params.push(Date.now());
-        }
-        
-        // Remove trailing comma
-        query = query.slice(0, -2);
-        query += ' WHERE id = ?';
-        params.push(id);
-        
-        await pool.query(query, params);
         res.json({ message: 'Chapter updated successfully' });
     } catch (error) {
         console.error('Error updating chapter:', error);
@@ -133,8 +115,9 @@ router.put('/:id', async (req, res) => {
 // DELETE chapter
 router.delete('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        await pool.query('DELETE FROM chapters WHERE id = ?', [id]);
+        const id = req.params.id;
+        const query = getQuery(id);
+        await Chapter.findOneAndDelete(query);
         res.json({ message: 'Chapter deleted successfully' });
     } catch (error) {
         console.error('Error deleting chapter:', error);

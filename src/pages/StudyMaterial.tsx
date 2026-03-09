@@ -25,8 +25,8 @@ export default function StudyMaterial() {
             try {
                 setLoading(true);
                 const [chapterData, materialsData] = await Promise.all([
-                    api.getChapterById(Number(chapterId)),
-                    api.getChapterStudyMaterials(Number(chapterId))
+                    api.getChapterById(chapterId),
+                    api.getChapterStudyMaterials(chapterId)
                 ]);
 
                 setChapter(chapterData);
@@ -44,7 +44,7 @@ export default function StudyMaterial() {
     const handleMarkStudied = async () => {
         if (!chapterId) return;
         try {
-            await api.updateChapter(Number(chapterId), {
+            await api.updateChapter(chapterId, {
                 completed: true,
                 completed_at: Date.now()
             });

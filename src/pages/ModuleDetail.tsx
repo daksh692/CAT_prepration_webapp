@@ -19,8 +19,8 @@ export default function ModuleDetail() {
                 setLoading(true);
                 // Fetch module and chapters in parallel
                 const [moduleData, chaptersData, materialsChapters] = await Promise.all([
-                    api.getModuleById(Number(moduleId)),
-                    api.getChaptersByModule(Number(moduleId)),
+                    api.getModuleById(moduleId),
+                    api.getChaptersByModule(moduleId),
                     api.getChaptersWithMaterials()
                 ]);
 

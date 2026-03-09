@@ -54,7 +54,7 @@ class ApiService {
         return this.request<any[]>('/modules');
     }
 
-    async getModuleById(id: number) {
+    async getModuleById(id: number | string) {
         return this.request<any>(`/modules/${id}`);
     }
 
@@ -68,11 +68,11 @@ class ApiService {
         return this.request<any[]>('/chapters');
     }
 
-    async getChapterById(id: number) {
+    async getChapterById(id: number | string) {
         return this.request<any>(`/chapters/${id}`);
     }
 
-    async getChaptersByModule(moduleId: number) {
+    async getChaptersByModule(moduleId: number | string) {
         return this.request<any[]>(`/chapters/module/${moduleId}`);
     }
 
@@ -80,7 +80,7 @@ class ApiService {
         return this.request<any>(`/chapters/name/${encodeURIComponent(name)}`);
     }
 
-    async updateChapter(id: number, updates: any) {
+    async updateChapter(id: number | string, updates: any) {
         return this.request(`/chapters/${id}`, {
             method: 'PUT',
             body: JSON.stringify(updates),
@@ -89,11 +89,11 @@ class ApiService {
 
     // ==================== STUDY MATERIALS ====================
 
-    async getChapterStudyMaterials(chapterId: number) {
+    async getChapterStudyMaterials(chapterId: number | string) {
         return this.request<any>(`/study/chapter/${chapterId}`);
     }
 
-    async getSkipTestQuestions(chapterId: number) {
+    async getSkipTestQuestions(chapterId: number | string) {
         return this.request<any[]>(`/study/skip-test/${chapterId}`);
     }
 
@@ -118,7 +118,7 @@ class ApiService {
     }
 
     // Study session
-    async recordStudySession(data: { chapter_id?: number; duration: number; questions_completed: number }) {
+    async recordStudySession(data: { chapter_id?: number | string; duration: number; questions_completed: number }) {
         return this.request<any>('/dashboard/session', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -150,7 +150,7 @@ class ApiService {
     }
 
     // Start session
-    async startSession(chapterId: number, studyMode: 'website' | 'external' = 'website') {
+    async startSession(chapterId: number | string, studyMode: 'website' | 'external' = 'website') {
         return this.request<any>('/study/sessions/start', {
             method: 'POST',
             body: JSON.stringify({ chapter_id: chapterId, study_mode: studyMode }),
@@ -158,7 +158,7 @@ class ApiService {
     }
 
     // End session
-    async endSession(data: { chapter_id?: number; duration: number; questions_completed: number; study_mode?: string }) {
+    async endSession(data: { chapter_id?: number | string; duration: number; questions_completed: number; study_mode?: string }) {
         return this.request<any>('/study/sessions/end', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -234,7 +234,7 @@ class ApiService {
 
     // Record website test result
     async recordWebsiteTest(data: {
-        chapter_id?: number;
+        chapter_id?: number | string;
         correct_mcq: number;
         incorrect_mcq: number;
         unattempted_mcq: number;
@@ -247,7 +247,7 @@ class ApiService {
 
     // Record external test result
     async recordExternalTest(data: {
-        chapter_id?: number;
+        chapter_id?: number | string;
         section?: 'VARC' | 'DILR' | 'QA';  // Added section field
         correct_mcq: number;
         incorrect_mcq: number;
@@ -268,7 +268,7 @@ class ApiService {
     }
 
     // Delete test result
-    async deleteTestResult(id: number) {
+    async deleteTestResult(id: number | string) {
         return this.request<{ message: string }>(`/tests/results/${id}`, {
             method: 'DELETE',
         });
